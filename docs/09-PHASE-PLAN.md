@@ -1,0 +1,85 @@
+# CampusConnect — Phase Plan
+
+A build-order plan structured so you always have something working, rather than half-finished pieces across every module at once.
+
+---
+
+## Phase 1 — Installation & Setup
+**Goal:** a running project with auth, database, and design system wired together, before writing a single feature.
+
+1. Scaffold the Next.js project (TypeScript, Tailwind, App Router).
+2. Install and configure Clerk — set up sign-in/sign-up pages, middleware for route protection, Google OAuth, and a default `role: student` on new signups via `publicMetadata`.
+3. Create the Supabase project — set up the database, connect it to Clerk via Supabase's third-party auth integration so RLS can read the Clerk JWT's role claim. Create the `seeded_campus_ids` table and insert the sample IDs from `02-ARCHITECTURE.md` §9 so the Campus ID signup/login flow has something real to validate against from day one.
+4. Set up `shadcn/ui` and confirm Tailwind theme tokens (colors, radii) match the design system from your mockups.
+5. Scaffold the folder structure (see `02-ARCHITECTURE.md`).
+6. Set up environment variables and confirm `.env.local` is git-ignored.
+7. Build the shared UI primitives first, since every screen depends on them: Button, Input, Select/Dropdown, Modal, Badge, Table, Card, Sidebar, Navbar, Toast, Skeleton loader, Empty state component.
+8. Confirm: a logged-out user can view a placeholder landing page, sign up, log in, and land on a placeholder dashboard — before building any real feature.
+
+**Exit criteria:** auth works end-to-end, shared components exist, folder structure is in place.
+
+---
+
+## Phase 2 — Frontend (UI) Build
+**Goal:** every one of the 38 screens exists and renders correctly with realistic mock or seeded data, before wiring real backend logic everywhere.
+
+Build in this order — each step reuses patterns from the previous one, which is why announcements come first (simplest CRUD shape):
+
+1. **Guest shell:** Landing, Login, Signup, Forgot Password — get the auth-adjacent pages done first since nothing else works without them.
+2. **Announcements (full loop):** Public list → Public detail → Student list → Student detail → Admin Manage Announcements + create/edit modal. This proves your full CRUD + guest/student/admin pattern once.
+3. **Events:** Public list/detail → Student list/detail/My Events → Admin Manage Events + create modal + Registrants page.
+4. **Concerns:** Submit form → My Concerns → Concern detail (student) → Personnel dashboard/All Concerns/Concern detail (staff) → Admin Manage Concerns + assign modal.
+5. **Lost & Found:** Public list → Report form → Student list/detail → Personnel management → Admin management.
+6. **Notifications & Profile:** Notifications inbox, Profile page.
+7. **Dashboards:** Student Dashboard, Personnel Dashboard, Admin Dashboard (build these after their underlying modules exist, since dashboards just aggregate/link to them).
+8. **Admin extras:** Manage Users + role modal, Reports & Insights.
+9. **System states:** 404, Access Denied, and confirm every list has a working empty state.
+
+At this stage, screens can use static/seeded data if backend logic (Phase 3) isn't wired yet for a given module — the point of this phase is layout, responsiveness, and interaction wiring (buttons, modals, search inputs functioning visually), not full correctness yet.
+
+**Exit criteria:** all 38 screens exist, are responsive, and every button/modal/search bar in `08-FUNCTIONALITY-PROMPT.md` is wired to *something* (even if it's still touching mock data).
+
+---
+
+## Phase 3 — Backend (Real Data & Logic)
+**Goal:** every screen from Phase 2 is now backed by real Supabase data with correct RLS, replacing any mock data.
+
+1. Create all Supabase tables and RLS policies (see `02-ARCHITECTURE.md` §4).
+2. Wire Announcements CRUD to Supabase — confirm publish/draft toggle, category filter, and search all query real data.
+3. Wire Events CRUD + registration logic — including capacity enforcement (block registration once full) and registrant export.
+4. Wire Concerns — submission with file upload to Supabase Storage, threaded replies, status updates, and assignment logic.
+5. Wire Lost & Found — submission with photo upload, status updates.
+6. Wire Notifications — set up Postgres triggers (or app-level inserts) for new announcements, event updates, and concern status changes; connect Supabase Realtime so the notification bell updates live.
+7. Wire User Management — role changes update both Clerk `publicMetadata` and the Supabase `users` table; deactivation blocks login.
+8. Wire Reports — build the aggregate queries backing each chart (concerns by status, events by attendance, lost & found resolution rate) and the CSV/PDF export.
+9. Replace every remaining hardcoded/mock value with a real query, per `03-CODE-STANDARDS.md`.
+
+**Exit criteria:** no screen uses mock data; every action (submit, register, assign, publish, delete) persists correctly and respects role-based access at the database level.
+
+---
+
+## Phase 4 — What's Needed After (Testing, Polish, Deployment)
+
+1. **Functional & security testing** — work through `05-TESTING-REPORT.md` in full, including RLS bypass attempts and role-tampering checks.
+2. **Responsive QA** — test every screen at mobile, tablet, and desktop widths; fix any layout breakage.
+3. **Performance pass** — run Lighthouse on key pages (Landing, Dashboard, Announcements list), fix any major score issues (unoptimized images, layout shift, unnecessary client components).
+4. **Empty/loading/error state audit** — click through every list and form with no data, slow network (throttle in dev tools), and a forced error, confirming nothing breaks or shows a blank screen.
+5. **Accessibility pass (light)** — confirm form fields have labels, buttons have accessible text, color contrast is reasonable.
+6. **Domain & deployment** — connect the domain, deploy to Vercel, confirm SSL is active, set production environment variables separately from local dev ones.
+7. **Seed realistic demo data** — so the live deployed version looks populated and real for your presentation, not empty.
+8. **Rehearse the demo** using `04-DEMO-GUIDE.md`.
+9. **Final proposal document update** — make sure your written proposal's Technology Stack, Timeline, and Screens sections match what was actually built.
+
+**Exit criteria:** system is live, tested, documented, and demo-ready.
+
+---
+
+## Summary Timeline Mapping
+| Phase | What | Roughly maps to proposal's... |
+|---|---|---|
+| 1 — Installation | Setup, auth, shared components | "System Design" |
+| 2 — Frontend | All 38 screens, UI wiring | "Development" (frontend half) |
+| 3 — Backend | Real data, RLS, notifications, reports | "Development" (backend half) |
+| 4 — After | Testing, polish, deployment, demo prep | "Testing and QA" + "Deployment" + "Project Presentation" |
+
+Use this alongside `07-PROGRESS-TRACKER.md` to check off items as each phase progresses — that file mirrors this exact structure so you can track completion percentage per phase.
