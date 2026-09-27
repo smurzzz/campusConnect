@@ -83,11 +83,69 @@ function AnnouncementCards({ items=announcements, student=false }: { items?: typ
 function EventCards({ items=events, register=false }: { items?: typeof events; register?: boolean }) { return <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{items.map((e,i)=><article key={e.id} className="event-card animate-rise" style={{animationDelay:`${i*70}ms`}}><div className={cn("relative flex h-40 items-end p-5",e.tone)}><span className="rounded-md bg-background/90 px-3 py-2 text-center text-xs font-bold text-foreground shadow-sm">{e.day.split(" ")[0]}<strong className="block text-xl text-primary">{e.day.split(" ")[1]}</strong></span></div><div className="p-5"><span className="category-badge">{e.category}</span><h2 className="mt-3 text-lg font-semibold">{e.title}</h2><div className="mt-4 space-y-2 text-sm text-muted-foreground"><p className="flex items-center gap-2"><CalendarDays/>{e.date}</p><p className="flex items-center gap-2"><MapPin/>{e.location}</p>{register&&<p className="flex items-center gap-2"><UsersRound/>{e.spots} spots left</p>}</div><Button className="mt-5 w-full" variant={register?"default":"outline"} asChild><Link href={`/events/${e.id}${register?"?view=student":""}`}>{register?"Register":"View details"}</Link></Button></div></article>)}</div>; }
 function StatCard({ label,value,icon,trend }: {label:string;value:string;icon:any;trend?:string}) { return <div className="stat-card"><div className="flex items-start justify-between"><div><p className="text-sm font-medium text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p>{trend&&<p className="mt-2 text-xs font-medium text-success"><TrendingUp className="mr-1 inline size-3"/>{trend}</p>}</div><span className="grid size-11 place-items-center rounded-lg bg-primary-soft text-primary">{icon}</span></div></div>; }
 function Section({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}) { return <section className="section-panel"><div className="mb-5 flex items-center justify-between"><h2 className="section-title">{title}</h2>{action}</div>{children}</section>; }
-function AssignConcernDialog({ concern }: { concern: typeof concerns[number] }) { const [assignee,setAssignee]=useState(concern.assignee); return <Dialog><DialogTrigger asChild><Button variant="ghost" size="icon" aria-label={`Assign ${concern.subject}`}><UserRound/></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Assign concern</DialogTitle><DialogDescription>Choose the personnel team responsible for {concern.id}.</DialogDescription></DialogHeader><div className="rounded-md border border-border bg-muted/50 p-4"><p className="text-sm font-semibold">{concern.subject}</p><p className="mt-1 text-xs text-muted-foreground">Submitted by {concern.student} · {concern.category}</p></div><FormField label="Assign to personnel"><select className="field-select w-full" value={assignee} onChange={e=>setAssignee(e.target.value)}><option>Unassigned</option><option>Facilities Team</option><option>Student Services</option><option>Safety Office</option><option>Academic Affairs</option></select></FormField><div className="flex items-start gap-3 rounded-md bg-primary-soft p-3 text-sm text-primary"><Bell className="mt-0.5 shrink-0"/><p>The selected team will be notified and can update the concern immediately.</p></div><DialogFooter><Button onClick={()=>toast.success(`${concern.id} assigned to ${assignee}`)}>Confirm assignment</Button></DialogFooter></DialogContent></Dialog>; }
-function ConcernsTable({ admin=false, staff=false, items=concerns }: { admin?:boolean;staff?:boolean;items?:typeof concerns }) { if(!items.length)return <EmptyState title="No concerns found" text="Try changing your search or filters. New concerns will appear here when submitted."/>; return <div className="table-shell"><div className="hidden grid-cols-[1.6fr_1fr_1fr_1fr_1fr_auto] gap-4 border-b border-border bg-muted/60 px-5 py-3 text-xs font-semibold uppercase text-muted-foreground md:grid"><span>Subject</span><span>{admin||staff?"Student":"Category"}</span><span>Category</span><span>Status</span><span>Date</span><span>Actions</span></div>{items.map(c=><div key={c.id} className="data-grid-row md:grid-cols-[1.6fr_1fr_1fr_1fr_1fr_auto]"><div><p className="font-semibold">{c.subject}</p><p className="mt-1 text-xs text-muted-foreground">{c.id}</p></div><div><span className="mobile-label">{admin||staff?"Student":"Category"}</span>{admin||staff?c.student:c.category}</div><div className="hidden md:block">{c.category}</div><div><span className="mobile-label">Status</span><StatusBadge status={c.status}/></div><div><span className="mobile-label">Date</span>{c.date}</div><div className="flex gap-1"><Button variant="ghost" size="icon" asChild><Link href={staff?`/staff/concerns/${c.id}`:`/concerns/${c.id}`} aria-label={`View ${c.subject}`}><Eye/></Link></Button>{admin&&<AssignConcernDialog concern={c}/>}</div></div>)}</div>; }
+function AssignConcernDialog({ concern }: { concern: typeof concerns[number] }) { const [assignee,setAssignee]=useState(concern.assignee); return <Dialog><DialogTrigger asChild><Button variant="ghost" size="icon" aria-label={`Assign ${concern.subject}`}><UserRound/></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Assign concern</DialogTitle><DialogDescription>Choose the personnel team responsible for {concern.id}.</DialogDescription></DialogHeader><div className="rounded-md border border-border bg-muted/50 p-4"><p className="text-sm font-semibold">{concern.subject}</p><p className="mt-1 text-xs text-muted-foreground">Submitted by {concern.studentName} · {concern.category}</p></div><FormField label="Assign to personnel"><select className="field-select w-full" value={assignee} onChange={e=>setAssignee(e.target.value)}><option>Unassigned</option><option>Facilities Team</option><option>Student Services</option><option>Safety Office</option><option>Academic Affairs</option></select></FormField><div className="flex items-start gap-3 rounded-md bg-primary-soft p-3 text-sm text-primary"><Bell className="mt-0.5 shrink-0"/><p>The selected team will be notified and can update the concern immediately.</p></div><DialogFooter><Button onClick={()=>toast.success(`${concern.id} assigned to ${assignee}`)}>Confirm assignment</Button></DialogFooter></DialogContent></Dialog>; }
+function ConcernsTable({ admin=false, staff=false, items=[] }: { admin?:boolean;staff?:boolean;items?: typeof concerns[] }) {
+  if(!items.length)return <EmptyState title="No concerns found" text="Try changing your search or filters. New concerns will appear here when submitted."/>;
+  return <div className="table-shell">
+    <div className="hidden grid-cols-[1.6fr_1fr_1fr_1fr_1fr_auto] gap-4 border-b border-border bg-muted/60 px-5 py-3 text-xs font-semibold uppercase text-muted-foreground md:grid">
+      <span>Subject</span>
+      <span>{admin||staff?"Student":"Category"}</span>
+      <span>Category</span>
+      <span>Status</span>
+      <span>Date</span>
+      <span>Actions</span>
+    </div>
+    {items.map(c=> (
+      <div key={c.id} className="data-grid-row md:grid-cols-[1.6fr_1fr_1fr_1fr_1fr_auto]">
+        <div>
+          <p className="font-semibold">{c.subject}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{c.id}</p>
+        </div>
+        <div>
+          <span className="mobile-label">{admin||staff?"Student":"Category"}</span>
+          {admin||staff?c.studentName:c.category}
+        </div>
+        <div className="hidden md:block">
+          {c.category}
+        </div>
+        <div>
+          <span className="mobile-label">Status</span>
+          <StatusBadge status={c.status as Status} />
+        </div>
+        <div>
+          <span className="mobile-label">Date</span>
+          {c.submittedAt}
+        </div>
+        <div className="flex gap-1">
+          <Button variant="ghost" size="icon" asChild>
+            <Link href={staff?`/staff/concerns/${c.id}`:`/concerns/${c.id}`} aria-label={`View ${c.subject}`}>
+              <Eye/>
+            </Link>
+          </Button>
+          {admin&&<AssignConcernDialog concern={c as unknown as typeof concerns[number]}/>}
+        </div>
+      </div>
+    ))}
+  </div>;
+}
 function ChangeRoleDialog({ name, currentRole }: { name:string; currentRole:string }) { const [role,setRole]=useState(currentRole); return <Dialog><DialogTrigger asChild><Button variant="ghost" size="icon" aria-label={`Change role for ${name}`}><Pencil/></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Change account role</DialogTitle><DialogDescription>Update the permissions available to {name}.</DialogDescription></DialogHeader><div className="flex items-center gap-3 rounded-md border border-border p-4"><span className="avatar">{name.split(" ").map(x=>x.charAt(0)).join("")}</span><div><p className="font-semibold">{name}</p><p className="text-xs text-muted-foreground">Current role: {currentRole}</p></div></div><FormField label="New role"><select className="field-select w-full" value={role} onChange={e=>setRole(e.target.value)}><option>Student</option><option>Personnel</option><option>Admin</option></select></FormField><div className="flex items-start gap-3 rounded-md bg-warning-soft p-3 text-sm text-warning"><AlertCircle className="mt-0.5 shrink-0"/><p>Permission changes take effect immediately. Admin access includes user and campus-wide management.</p></div><DialogFooter><Button onClick={()=>toast.success(`${name} is now ${role}`)}>Confirm role change</Button></DialogFooter></DialogContent></Dialog>; }
-function ManagementTable({kind}:{kind:"announcements"|"events"|"lost"|"users"}) {
- const rows=kind==="announcements"?announcements.map((a,i)=>[a.title,a.category,a.date,i===3?"Draft":"Published"]):kind==="events"?events.map(e=>[e.title,e.location,e.date,`${e.cap-e.spots} registered`]):kind==="lost"?lostItems.map(x=>[x.name,x.type,x.date,x.status]):[["Maya Santos","maya.santos@campus.edu","Student","Active"],["Alex Rivera","alex.rivera@campus.edu","Personnel","Active"],["Dr. Ana Lim","ana.lim@campus.edu","Admin","Active"],["Noah Tan","noah.tan@campus.edu","Student","Deactivated"]];
+function ManagementTable({kind, data}:{kind:"announcements"|"events"|"lost"|"users"; data?: any[]}) {
+ // Use real data if provided and not empty, otherwise use mock data
+  const rows = data && data.length > 0
+    ? kind === "announcements"
+      ? data.map((a: any) => [a.title, a.category, a.date, a.status || "Published"])
+      : kind === "events"
+        ? data.map((e: any) => [e.title, e.location, e.date, `${e.cap - e.spots} registered`])
+        : kind === "lost"
+          ? data.map((x: any) => [x.name, x.type, x.date, x.status])
+          : data.map((u: any) => [u.full_name || `${u.first_name} ${u.last_name}`, u.email, u.role, u.status || "Active"])
+    : kind === "announcements"
+      ? announcements.map((a, i) => [a.title, a.category, a.date, i === 3 ? "Draft" : "Published"])
+      : kind === "events"
+        ? events.map(e => [e.title, e.location, e.date, `${e.cap - e.spots} registered`])
+        : kind === "lost"
+          ? lostItems.map(x => [x.name, x.type, x.date, x.status])
+          : [["Maya Santos", "maya.santos@campus.edu", "Student", "Active"], ["Alex Rivera", "alex.rivera@campus.edu", "Personnel", "Active"], ["Dr. Ana Lim", "ana.lim@campus.edu", "Admin", "Active"], ["Noah Tan", "noah.tan@campus.edu", "Student", "Deactivated"]];
   return <div className="table-shell">{rows.map((r,i)=>{ const [name="", detail="", date="", status="Open"] = r; return <div key={i} className="data-grid-row md:grid-cols-[1.8fr_1fr_1fr_1fr_auto]"><div className="flex items-center gap-3">{kind==="users"&&<span className="grid size-9 place-items-center rounded-full bg-primary-soft font-semibold text-primary">{name.split(" ").map(x=>x.charAt(0)).join("")}</span>}<span className="font-semibold">{name}</span></div><div>{detail}</div><div>{date}</div><div><StatusBadge status={status}/></div><div className="flex gap-1">{kind==="users"?<ChangeRoleDialog name={name} currentRole={date}/>:<Button variant="ghost" size="icon" aria-label={`Edit ${name}`} onClick={()=>toast("Edit panel opened")}><Pencil/></Button>}<Button variant="ghost" size="icon" aria-label={`More options for ${name}`} onClick={()=>toast("More actions opened")}><MoreHorizontal/></Button></div></div>})}</div>;
 }
 function MiniChart({type="bar"}:{type?:"bar"|"line"|"donut"}) { const vals=[42,64,48,76,58,88,72]; return <div className="mt-5 flex h-44 items-end gap-3 border-b border-border px-2 pb-0">{type==="donut"?<div className="mx-auto mb-5 grid size-36 place-items-center rounded-full bg-chart-ring"><div className="grid size-20 place-items-center rounded-full bg-card text-center"><span><strong className="block text-2xl">78%</strong><small className="text-muted-foreground">resolved</small></span></div></div>:vals.map((v,i)=><div key={i} className="flex h-full flex-1 items-end"><span className={cn("w-full rounded-t-sm",type==="line"?"bg-accent":"bg-primary/75")} style={{height:`${v}%`}}/></div>)}</div>; }
@@ -185,7 +243,77 @@ function Frame({title,subtitle,actions,children}:{title:string;subtitle?:string;
 function loginPrompt(){toast.info("Please log in to continue",{action:{label:"Log in",onClick:()=>{window.location.href="/login"}}})}
 function AnnouncementDetail(){return <Frame title="Enrollment schedule for Term 2" subtitle="Academic · Posted Sep 24, 2026"><Link href="/announcements" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-primary"><ArrowLeft/>Back to announcements</Link><article className="section-panel max-w-4xl"><span className="category-badge">Academic</span><div className="mt-6 overflow-hidden rounded-md bg-event-blue p-10 text-center"><BookOpen className="mx-auto size-16 text-primary"/></div><div className="prose-copy"><p>Online enrollment for Term 2 opens on Monday, September 28. Students are encouraged to review their assigned enrollment schedule and adviser notes in advance.</p><h2>Before you enroll</h2><p>Confirm that all outstanding academic and financial clearances are reflected in your student portal. Contact Student Services if any requirement appears incorrectly.</p><p>Enrollment help desks will be available in the Learning Commons from 8:00 AM to 5:00 PM throughout the week.</p></div></article></Frame>}
 function EventDetail(){const guest=useGuest();const[registered,setRegistered]=useState(false);return <Frame title="Innovation Week 2026" subtitle="A week of ideas, making, and collaboration."><div className="grid gap-6 xl:grid-cols-[1fr_340px]"><article className="section-panel"><div className="mb-6 flex h-64 items-center justify-center rounded-md bg-event-blue"><Sparkles className="size-20 text-primary"/></div><h2 className="section-title">About this event</h2><p className="mt-4 leading-7 text-muted-foreground">Join students, faculty, and industry mentors for hands-on workshops, startup showcases, design challenges, and conversations about the future of technology.</p></article><aside className="section-panel h-fit"><div className="space-y-4"><p className="flex gap-3"><CalendarDays className="text-primary"/><span><strong className="block">October 4, 2026</strong><small className="text-muted-foreground">9:00 AM – 5:00 PM</small></span></p><p className="flex gap-3"><MapPin className="text-primary"/><span><strong className="block">University Hall</strong><small className="text-muted-foreground">Main campus</small></span></p></div><div className="my-6 border-t border-border pt-5"><div className="mb-2 flex justify-between text-sm"><span className="font-medium">42 / 60 registered</span><span className="text-muted-foreground">18 spots left</span></div><Progress value={70}/></div><Button className="w-full" size="lg" variant={registered?"secondary":"default"} onClick={()=>{if(guest){loginPrompt();return}setRegistered(!registered);toast.success(registered?"Registration cancelled":"You’re registered!")}}>{registered?<><Check/>Registered</>:"Register for this event"}</Button></aside></div></Frame>}
-function LostFound(){const[tab,setTab]=useState("Lost");const[q,setQ]=useState("");const list=lostItems.filter(x=>x.type===tab&&x.name.toLowerCase().includes(q.toLowerCase()));return <Frame title="Lost & Found" subtitle="Browse recent reports or help return an item." actions={<Button asChild><Link href="/lost-found/new"><Plus/>Report an item</Link></Button>}><div className="mb-5 flex flex-col gap-3 sm:flex-row"><div className="segmented">{["Lost","Found"].map(x=><Button key={x} variant={tab===x?"default":"ghost"} onClick={()=>setTab(x)}>{x} items</Button>)}</div><div className="relative flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder={`Search ${tab.toLowerCase()} items`} value={q} onChange={e=>setQ(e.target.value)}/></div></div><div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">{list.length===0&&<div className="sm:col-span-2 xl:col-span-4"><EmptyState title="No lost & found reports" text="Try another search or switch tabs."/></div>}{list.map(x=><Link href={`/lost-found/${x.id}`} className="event-card" key={x.id}><div className="grid h-44 place-items-center bg-muted text-6xl">{x.icon}</div><div className="p-5"><div className="flex items-center justify-between"><StatusBadge status={x.status}/><span className="text-xs text-muted-foreground">{x.date}</span></div><h2 className="mt-3 font-bold">{x.name}</h2><p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"><MapPin/>{x.location}</p></div></Link>)}</div></Frame>}
+function LostFound({ items=[] }:{ items?: typeof lostItems }) {
+  const [tab, setTab] = useState("Lost");
+  const [q, setQ] = useState("");
+
+  // Filter items based on tab and search query
+  const list = items.filter(x =>
+    x.type === tab &&
+    x.name.toLowerCase().includes(q.toLowerCase())
+  );
+
+  return (
+    <Frame
+      title="Lost & Found"
+      subtitle="Browse recent reports or help return an item."
+      actions={<Button asChild><Link href="/lost-found/new"><Plus/>Report an item</Link></Button>}
+    >
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row">
+        <div className="segmented">
+          {["Lost", "Found"].map(x => (
+            <Button
+              key={x}
+              variant={tab === x ? "default" : "ghost"}
+              onClick={() => setTab(x)}
+            >
+              {x} items
+            </Button>
+          ))}
+        </div>
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder={`Search ${tab.toLowerCase()} items`}
+            value={q}
+            onChange={e => setQ(e.target.value)}
+          />
+        </div>
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        {list.length === 0 ? (
+          <div className="sm:col-span-2 xl:col-span-4">
+            <EmptyState title="No lost & found reports" text="Try another search or switch tabs." />
+          </div>
+        ) : (
+          list.map(x => (
+            <Link
+              href={`/lost-found/${x.id}`}
+              className="event-card"
+              key={x.id}
+            >
+              <div className="grid h-44 place-items-center bg-muted text-6xl">
+                {x.icon}
+              </div>
+              <div className="p-5">
+                <div className="flex items-center justify-between">
+                  <StatusBadge status={x.status} />
+                  <span className="text-xs text-muted-foreground">{x.date}</span>
+                </div>
+                <h2 className="mt-3 font-bold">{x.name}</h2>
+                <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                  <MapPin />
+                  {x.location}
+                </p>
+              </div>
+            </Link>
+          ))
+        )}
+      </div>
+    </Frame>
+  );
+}
 function LostDetail(){const guest=useGuest();return <Frame title="Blue insulated bottle" subtitle="Lost item · Reported Sep 24"><div className="grid gap-6 xl:grid-cols-[1fr_420px]"><div className="grid min-h-96 place-items-center rounded-md bg-muted text-9xl">🥤</div><Section title="Item details"><StatusBadge status="Open"/><p className="mt-5 leading-7 text-muted-foreground">A navy blue insulated bottle with several small travel stickers. Last seen after the afternoon laboratory session.</p><dl className="detail-list mt-6"><div><dt>Location</dt><dd>Science Building, Room 205</dd></div><div><dt>Date reported</dt><dd>Sep 24, 2026</dd></div><div><dt>Category</dt><dd>Personal item</dd></div></dl><Button className="mt-6 w-full" size="lg" onClick={()=>guest?loginPrompt():toast.success("Message request sent")}><Mail/>Message reporter</Button></Section></div></Frame>}
 function Profile(){return <AppShell role="student" title="My profile" subtitle="Keep your contact information up to date."><div className="max-w-3xl"><Section title="Profile information"><div className="mb-7 flex items-center gap-4"><span className="relative grid size-20 place-items-center rounded-full bg-primary-soft text-xl font-bold text-primary">MS<button className="absolute -bottom-1 -right-1 grid size-8 place-items-center rounded-full bg-primary text-primary-foreground"><Camera className="size-4"/></button></span><div><p className="font-bold">Maya Santos</p><StatusBadge status="Student"/></div></div><form className="grid gap-5 sm:grid-cols-2" onSubmit={e=>{e.preventDefault();toast.success("Profile saved")}}><FormField label="Full name"><Input defaultValue="Maya Santos"/></FormField><FormField label="Email" note="Managed by your school account"><Input defaultValue="maya.santos@campus.edu" readOnly/></FormField><FormField label="Contact number"><Input defaultValue="+65 9123 4567"/></FormField><FormField label="Account role"><Input defaultValue="Student" readOnly/></FormField><div className="sm:col-span-2"><Button type="submit">Save changes</Button></div></form></Section></div></AppShell>}
 function Notifications(){const[read,setRead]=useState(false);const items=[[Megaphone,"New enrollment schedule posted","10 minutes ago"],[MessageSquareText,"Facilities Team replied to your concern","2 hours ago"],[CalendarDays,"Innovation Week starts in 9 days","Yesterday"],[PackageSearch,"A found item may match your report","Sep 23"]] as const;return <AppShell role="student" title="Notifications" subtitle="Updates that need your attention." actions={<Button variant="outline" onClick={()=>{setRead(true);toast.success("All notifications marked as read")}}><Check/>Mark all as read</Button>}><div className="section-panel p-0">{items.map(([Icon,text,time],i)=><div className="flex gap-4 border-b border-border p-5 last:border-0" key={text}><span className="grid size-10 shrink-0 place-items-center rounded-md bg-primary-soft text-primary"><Icon/></span><div className="flex-1"><p className={cn("text-sm",!read&&i<2&&"font-bold")}>{text}</p><p className="mt-1 text-xs text-muted-foreground">{time}</p></div>{!read&&i<2&&<span className="mt-2 size-2 rounded-full bg-primary"/>}</div>)}</div></AppShell>}
