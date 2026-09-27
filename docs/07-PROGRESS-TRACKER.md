@@ -3,9 +3,9 @@
 Update the checkboxes as you complete each item. Organized by phase — see `09-PHASE-PLAN.md` for the full plan this maps to.
 
 ## Phase 0 — Setup (13 items)
-- [ ] Next.js project initialized
-- [ ] Tailwind CSS configured
-- [ ] Clerk installed and configured (sign-in/sign-up URLs, middleware)
+- [x] Next.js project initialized
+- [x] Tailwind CSS configured
+- [x] Clerk installed and configured (sign-in/sign-up URLs, middleware)
 - [ ] Google OAuth enabled in Clerk
 - [ ] Supabase project created
 - [ ] Supabase ↔ Clerk third-party auth connected
@@ -13,9 +13,9 @@ Update the checkboxes as you complete each item. Organized by phase — see `09-
 - [ ] Sample Campus IDs seeded for dev/demo (see `02-ARCHITECTURE.md` §9)
 - [ ] Campus ID field added to signup (validation: `^CA[A-Za-z0-9]{9}$` + existence/unclaimed check against seeded table)
 - [ ] Campus ID login lookup implemented (Campus ID → email → Clerk auth)
-- [ ] Environment variables set (`.env.local`)
-- [ ] Folder structure scaffolded per `02-ARCHITECTURE.md`
-- [ ] Git repo initialized, `.gitignore` confirmed
+- [x] Environment variables set (`.env.local`)
+- [x] Folder structure scaffolded per `02-ARCHITECTURE.md`
+- [x] Git repo initialized, `.gitignore` confirmed
 
 *Note: bulk CSV import for Campus IDs is a stretch goal, not required for MVP — manual single-entry (or direct database seeding) is sufficient for now.*
 
@@ -33,52 +33,54 @@ Update the checkboxes as you complete each item. Organized by phase — see `09-
 ## Phase 2 — Frontend Screens (38 total)
 
 ### Guest (9)
-- [ ] Landing page
-- [ ] Login page
-- [ ] Signup page
-- [ ] Forgot Password page
-- [ ] Public Announcements list
-- [ ] Public Announcement detail
-- [ ] Public Events list
-- [ ] Public Event detail
-- [ ] Public Lost & Found (+ empty state)
+- [x] Landing page
+- [x] Login page
+- [x] Signup page
+- [x] Forgot Password page
+- [x] Public Announcements list
+- [x] Public Announcement detail
+- [x] Public Events list
+- [x] Public Event detail
+- [x] Public Lost & Found (+ empty state)
 
 ### Student (14)
-- [ ] Dashboard
-- [ ] Announcements list
-- [ ] Announcement detail
-- [ ] Events list
-- [ ] Event detail
-- [ ] My Events
-- [ ] Submit a Concern
-- [ ] My Concerns
-- [ ] Concern detail (thread)
-- [ ] Report Lost/Found item
-- [ ] Lost & Found list
-- [ ] Lost & Found item detail
-- [ ] Profile
-- [ ] Notifications
+- [x] Dashboard
+- [x] Announcements list
+- [x] Announcement detail
+- [x] Events list
+- [x] Event detail
+- [x] My Events
+- [x] Submit a Concern
+- [x] My Concerns
+- [x] Concern detail (thread)
+- [x] Report Lost/Found item
+- [x] Lost & Found list
+- [x] Lost & Found item detail
+- [x] Profile
+- [x] Notifications
 
 ### Personnel (4)
-- [ ] Personnel dashboard
-- [ ] All Concerns
-- [ ] Concern detail (staff view + status/response)
-- [ ] Lost & Found management
+- [x] Personnel dashboard
+- [x] All Concerns
+- [x] Concern detail (staff view + status/response)
+- [x] Lost & Found management
 
 ### Admin (9)
-- [ ] Admin dashboard (with charts)
-- [ ] Manage Announcements (+ create/edit modal)
-- [ ] Manage Events (+ create/edit modal)
-- [ ] Event Registrants
-- [ ] Manage Concerns (+ assign modal)
-- [ ] Manage Lost & Found
-- [ ] Manage Users (+ role-change modal)
-- [ ] Manage Campus IDs (+ single-entry add; bulk import is stretch goal)
-- [ ] Reports & Insights
+- [x] Admin dashboard (with charts)
+- [x] Manage Announcements (+ create/edit modal)
+- [x] Manage Events (+ create/edit modal)
+- [x] Event Registrants
+- [x] Manage Concerns (+ assign modal)
+- [x] Manage Lost & Found
+- [x] Manage Users (+ role-change modal)
+- [x] Manage Campus IDs (+ single-entry add; bulk import is stretch goal)
+- [x] Reports & Insights
 
 ### System (2)
-- [ ] 404 Page Not Found
-- [ ] Access Denied
+- [x] 404 Page Not Found
+- [x] Access Denied
+
+*Note: all 38 screens are implemented on the App Router with deterministic mock data (Phase 3 wiring pending). Routes are grouped as `app/(public)`, `app/(app)` and `app/(auth)`; `/admin/*` is admin-only and `/staff/*` is personnel/admin in `proxy.ts`. `npx tsc --noEmit`, `npm run lint` and `npm run build` all pass.*
 
 ## Phase 3 — Backend Logic / Functionality (8 items)
 - [ ] Auth: sign up, log in, log out, role assignment, protected routing (email/password, Google, Campus ID)
@@ -108,9 +110,9 @@ Update the checkboxes as you complete each item. Organized by phase — see `09-
 ## Overall Completion
 | Phase | Total Items | Completed | % |
 |---|---|---|---|
-| Setup | 13 | 0 | 0% |
+| Setup | 13 | 7 | 54% |
 | Database & RLS | 9 | 0 | 0% |
-| Frontend Screens | 38 | 0 | 0% |
+| Frontend Screens | 38 | 38 | 100% |
 | Backend Logic | 8 | 0 | 0% |
 | Testing | 5 | 0 | 0% |
 | Deployment | 6 | 0 | 0% |
