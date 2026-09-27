@@ -39,7 +39,7 @@ export default function AdminAnnouncementsPage() {
 
   return (
     <CampusPage page="admin-announcements">
-      <ManagementTable kind="announcements" />
+      <ManagementTable kind="announcements" data={announcements} />
     </CampusPage>
   );
 }

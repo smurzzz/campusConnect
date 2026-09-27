@@ -699,6 +699,37 @@ export async function updateUser(id: string, user: Database['public']['Tables'][
   return data
 }
 
+// Reports & Analytics
+export async function getConcernsByStatus() {
+  const { data, error } = await supabase
+    .from('concerns')
+    .select('status, count')
+    .group('status')
+
+  if (error) throw error
+  return data
+}
+
+export async function getEventsAttendance() {
+  const { data, error } = await supabase
+    .from('events')
+    .select('title, capacity, event_registrations!inner(count)')
+    .order('start_time', { ascending: false })
+
+  if (error) throw error
+  return data
+}
+
+export async function getLostFoundResolutionRate() {
+  const { data, error } = await supabase
+    .from('lost_found_items')
+    .select('status, count')
+    .group('status')
+
+  if (error) throw error
+  return data
+}
+
 // Seeded Campus IDs
 export async function getSeededCampusIds() {
   const { data, error } = await supabase
@@ -719,4 +750,186 @@ export async function claimCampusId(id: string, userId: string) {
 
   if (error) throw error
   return data
+}
+
+// Storage
+export async function uploadConcernAttachment(file: File): Promise<string> {
+  const filename = `${Date.now()}-${file.name.replace(/\s+/g, '-')}`
+  const { data, error } = await supabase
+    .storage
+    .from('concern-attachments')
+    .upload(filename, file)
+
+  if (error) throw error
+
+  // Get public URL
+  const { data: urlData } = supabase
+    .storage
+    .from('concern-attachments')
+    .getPublicUrl(filename)
+
+  return urlData.publicUrl
+}
+
+// Helper to get users by roles
+export async function getUsersByRoles(roles: string[]) {
+  const { data, error } = await supabase
+    .from('users')
+    .select('*')
+    .in('role', roles)
+
+  if (error) throw error
+  return data
+}
+
+// Notification creation functions
+export async function createAnnouncementNotification(announcementId: string, excludeUserId?: string) {
+  try {
+    // Fetch the announcement
+    const { data: announcement, error: announcementError } = await supabase
+      .from('announcements')
+      .select('*, created_by')
+      .eq('id', announcementId)
+      .single()
+
+    if (announcementError) throw announcementError
+    if (!announcement) throw new Error('Announcement not found')
+
+    // Only notify if published
+    if (announcement.status !== 'published') return
+
+    // Determine target roles based on audience
+    let targetRoles: string[] = []
+    switch (announcement.audience) {
+      case 'Everyone':
+        targetRoles = ['student', 'staff', 'admin']
+        break
+      case 'Students only':
+        targetRoles = ['student']
+        break
+      case 'Personnel only':
+        targetRoles = ['staff', 'admin']
+        break
+      default:
+        targetRoles = ['student', 'staff', 'admin']
+    }
+
+    // Fetch users with target roles
+    const users = await getUsersByRoles(targetRoles)
+
+    // Create notification for each user (excluding the creator if specified)
+    for (const user of users) {
+      if (excludeUserId && user.id === excludeUserId) continue
+
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: user.id,
+          type: 'announcement',
+          title: announcement.title,
+          body: announcement.body.length > 100
+            ? announcement.body.substring(0, 100) + '...'
+            : announcement.body,
+          related_id: announcement.id,
+        })
+
+      if (error) console.error(`Failed to create notification for user ${user.id}:`, error)
+    }
+  } catch (error) {
+    console.error('Error in createAnnouncementNotification:', error)
+  }
+}
+
+export async function createEventUpdateNotification(eventId: string, excludeUserId?: string) {
+  try {
+    // Fetch the event
+    const { data: event, error: eventError } = await supabase
+      .from('events')
+      .select('*')
+      .eq('id', eventId)
+      .single()
+
+    if (eventError) throw eventError
+    if (!event) throw new Error('Event not found')
+
+    // Fetch registered users for this event
+    const { data: registrations, error: registrationsError } = await supabase
+      .from('event_registrations')
+      .select('student_id')
+      .eq('event_id', eventId)
+
+    if (registrationsError) throw registrationsError
+
+    // Get user IDs from registrations
+    const userIds = registrations.map((r: any) => r.student_id)
+
+    // Fetch user details for these IDs
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('*')
+      .in('id', userIds)
+
+    if (usersError) throw usersError
+
+    // Create notification for each registered user (excluding the updater if specified)
+    for (const user of users) {
+      if (excludeUserId && user.id === excludeUserId) continue
+
+      const { error } = await supabase
+        .from('notifications')
+        .insert({
+          user_id: user.id,
+          type: 'event',
+          title: `Update: ${event.title}`,
+          body: `The event "${event.title}" has been updated. Check for changes in time, location, or description.`,
+          related_id: event.id,
+        })
+
+      if (error) console.error(`Failed to create notification for user ${user.id}:`, error)
+    }
+  } catch (error) {
+    console.error('Error in createEventUpdateNotification:', error)
+  }
+}
+
+export async function createConcernStatusNotification(concernId: string, excludeUserId?: string) {
+  try {
+    // Fetch the concern
+    const { data: concern, error: concernError } = await supabase
+      .from('concerns')
+      .select('*, student_id')
+      .eq('id', concernId)
+      .single()
+
+    if (concernError) throw concernError
+    if (!concern) throw new Error('Concern not found')
+
+    // Fetch the student who submitted the concern
+    const { data: student, error: studentError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', concern.student_id)
+      .single()
+
+    if (studentError) throw studentError
+    if (!student) throw new Error('Student not found')
+
+    // Don't notify if the excluded user is the student (e.g., if student updated their own concern)
+    if (excludeUserId && student.id === excludeUserId) return
+
+    // Create notification for the student
+    const { error } = await supabase
+      .from('notifications')
+      .insert({
+        user_id: student.id,
+        type: 'concern',
+        title: `Concern Status Updated: ${concern.subject}`,
+        body: `Your concern "${concern.subject}" has been updated to "${concern.status}".`,
+        related_id: concern.id,
+      })
+
+    if (error) console.error('Failed to create concern status notification:', error)
+  } catch (error) {
+    console.error('Error in createConcernStatusNotification:', error)
+  }
 }

@@ -39,7 +39,7 @@ export default function AdminLostFoundPage() {
 
   return (
     <CampusPage page="admin-lost">
-      <ManagementTable kind="lost" />
+      <ManagementTable kind="lost" data={lostFoundItems} />
     </CampusPage>
   );
 }

@@ -20,35 +20,14 @@ import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { dashboardRouteForRole } from "@/lib/constants/routes";
+import { useNotifications } from "@/hooks/use-notifications";
 
 type PageKey = string;
 type Role = "student" | "staff" | "admin";
 
 type Status = "Pending" | "In Progress" | "Resolved" | "Urgent" | "Published" | "Draft" | "Open" | "Claimed" | "Upcoming" | "Past" | "Active" | "Deactivated";
 
-const announcements = [
-  { id: "1", title: "Enrollment schedule for Term 2", category: "Academic", date: "Sep 24, 2026", excerpt: "Online enrollment opens Monday. Review your assigned schedule and adviser notes before submitting." },
-  { id: "2", title: "Library extends weekend hours", category: "Campus Life", date: "Sep 22, 2026", excerpt: "The Learning Commons will stay open until 9:00 PM on Saturdays throughout examination month." },
-  { id: "3", title: "Scholarship applications now open", category: "Financial Aid", date: "Sep 19, 2026", excerpt: "Qualified students may submit requirements for the academic excellence and community service grants." },
-  { id: "4", title: "North gate maintenance notice", category: "Facilities", date: "Sep 17, 2026", excerpt: "Please use the main entrance while maintenance works continue through Friday afternoon." },
-];
-const events = [
-  { id: "1", title: "Innovation Week 2026", day: "OCT 04", date: "Oct 4 · 9:00 AM", location: "University Hall", category: "Academic", spots: 18, cap: 120, tone: "event-blue" },
-  { id: "2", title: "Campus Night Market", day: "OCT 11", date: "Oct 11 · 5:30 PM", location: "Central Quad", category: "Community", spots: 42, cap: 200, tone: "event-green" },
-  { id: "3", title: "Career Launch Workshop", day: "OCT 18", date: "Oct 18 · 1:00 PM", location: "Room 402", category: "Career", spots: 8, cap: 60, tone: "event-amber" },
-];
-const concerns = [
-  { id: "CC-1048", subject: "Air conditioning in Room 304", student: "Maya Santos", category: "Facility", status: "In Progress" as Status, date: "Sep 24, 2026", assignee: "Facilities Team" },
-  { id: "CC-1047", subject: "Incorrect grade reflected in portal", student: "Liam Cruz", category: "Academic", status: "Pending" as Status, date: "Sep 23, 2026", assignee: "Unassigned" },
-  { id: "CC-1043", subject: "Scholarship document verification", student: "Nora Reyes", category: "Administrative", status: "Resolved" as Status, date: "Sep 20, 2026", assignee: "Student Services" },
-  { id: "CC-1040", subject: "Broken path light near dormitory", student: "Ethan Lim", category: "Facility", status: "Urgent" as Status, date: "Sep 18, 2026", assignee: "Safety Office" },
-];
-const lostItems = [
-  { id: "1", name: "Blue insulated bottle", type: "Lost", location: "Science Building", date: "Sep 24", status: "Open" as Status, icon: "🥤" },
-  { id: "2", name: "Wireless earbuds case", type: "Found", location: "Central Library", date: "Sep 23", status: "Open" as Status, icon: "🎧" },
-  { id: "3", name: "Student ID card", type: "Found", location: "North Gate", date: "Sep 21", status: "Claimed" as Status, icon: "🪪" },
-  { id: "4", name: "Black canvas tote", type: "Lost", location: "Cafeteria", date: "Sep 20", status: "Open" as Status, icon: "👜" },
-];
+// Removed mock data - all data now comes from Supabase
 
 const studentNav = [
   ["Dashboard", "/dashboard", LayoutDashboard], ["Announcements", "/announcements", Megaphone], ["Events", "/events", CalendarDays], ["Concerns", "/concerns", MessageSquareText], ["Lost & Found", "/lost-found", PackageSearch], ["Notifications", "/notifications", Bell], ["Profile", "/profile", UserRound],
@@ -71,6 +50,7 @@ function PublicShell({ children }: { children: ReactNode }) {
   return <div className="min-h-screen bg-background"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-10 lg:px-8 lg:py-14">{children}</main></div>;
 }
 function AppShell({ role, title, subtitle, actions, children }: { role: Role; title: string; subtitle?: string; actions?: ReactNode; children: ReactNode }) {
+  const { unreadCount } = useNotifications();
   const path=usePathname();
   const [collapsed,setCollapsed]=useState(false);
   const nav=role==="admin"?adminNav:role==="staff"?staffNav:studentNav;
@@ -79,8 +59,12 @@ function AppShell({ role, title, subtitle, actions, children }: { role: Role; ti
 function PageHeader({ title, text }: { title: string; text: string }) { return <div className="mb-8"><h1 className="page-title">{title}</h1><p className="mt-2 max-w-2xl text-muted-foreground">{text}</p></div>; }
 function Filters({ search="Search", extra=true, value, onValue }: { search?: string; extra?: boolean; value?: string; onValue?: (value:string)=>void }) { return <div className="mb-6 flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder={search} value={value} onChange={e=>onValue?.(e.target.value)}/></div>{extra&&<><select className="field-select"><option>All categories</option><option>Academic</option><option>Facilities</option><option>Community</option></select><Button variant="outline"><Filter/>Filters</Button></>}</div>; }
 function EmptyState({ title, text, action }: { title:string; text:string; action?:ReactNode }) { return <div className="empty-state animate-rise"><span className="empty-state-icon"><Inbox/></span><h2 className="mt-4 text-lg font-bold">{title}</h2><p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{text}</p>{action&&<div className="mt-5">{action}</div>}</div>; }
-function AnnouncementCards({ items=announcements, student=false }: { items?: typeof announcements; student?: boolean }) { return <div className="space-y-3">{items.map((a,i)=><article key={a.id} className="content-card group animate-rise" style={{animationDelay:`${i*60}ms`}}><div className="flex flex-wrap items-center gap-2"><span className="category-badge">{a.category}</span><span className="text-xs text-muted-foreground">{a.date}</span></div><h2 className="mt-3 text-lg font-semibold group-hover:text-primary">{a.title}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{a.excerpt}</p><Link href={`/announcements/${a.id}${student?"?view=student":""}`} className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary">Read more <ArrowRight/></Link></article>)}</div>; }
-function EventCards({ items=events, register=false }: { items?: typeof events; register?: boolean }) { return <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{items.map((e,i)=><article key={e.id} className="event-card animate-rise" style={{animationDelay:`${i*70}ms`}}><div className={cn("relative flex h-40 items-end p-5",e.tone)}><span className="rounded-md bg-background/90 px-3 py-2 text-center text-xs font-bold text-foreground shadow-sm">{e.day.split(" ")[0]}<strong className="block text-xl text-primary">{e.day.split(" ")[1]}</strong></span></div><div className="p-5"><span className="category-badge">{e.category}</span><h2 className="mt-3 text-lg font-semibold">{e.title}</h2><div className="mt-4 space-y-2 text-sm text-muted-foreground"><p className="flex items-center gap-2"><CalendarDays/>{e.date}</p><p className="flex items-center gap-2"><MapPin/>{e.location}</p>{register&&<p className="flex items-center gap-2"><UsersRound/>{e.spots} spots left</p>}</div><Button className="mt-5 w-full" variant={register?"default":"outline"} asChild><Link href={`/events/${e.id}${register?"?view=student":""}`}>{register?"Register":"View details"}</Link></Button></div></article>)}</div>; }
+function AnnouncementCards({ items, student=false }: { items?: typeof announcements[]; student?: boolean }) {
+  if (!items || items.length === 0) return <div className="space-y-3"><p className="text-muted-foreground">No announcements available.</p></div>;
+  return <div className="space-y-3">{items.map((a,i)=><article key={a.id} className="content-card group animate-rise" style={{animationDelay:`${i*60}ms`}}><div className="flex flex-wrap items-center gap-2"><span className="category-badge">{a.category}</span><span className="text-xs text-muted-foreground">{a.date}</span></div><h2 className="mt-3 text-lg font-semibold group-hover:text-primary">{a.title}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{a.excerpt}</p><Link href={`/announcements/${a.id}${student?"?view=student":""}`} className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary">Read more <ArrowRight/></Link></article>)}</div>; }
+function EventCard({ items, register=false }: { items?: typeof events[]; register?: boolean }) {
+  if (!items || items.length === 0) return <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3"><p className="text-muted-foreground">No events available.</p></div>;
+  return <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{items.map((e,i)=><article key={e.id} className="event-card animate-rise" style={{animationDelay:`${i*70}ms`}}><div className={cn("relative flex h-40 items-end p-5",e.tone)}><span className="rounded-md bg-background/90 px-3 py-2 text-center text-xs font-bold text-foreground shadow-sm">{e.day.split(" ")[0]}<strong className="block text-xl text-primary">{e.day.split(" ")[1]}</strong></span></div><div className="p-5"><span className="category-badge">{e.category}</span><h2 className="mt-3 text-lg font-semibold">{e.title}</h2><div className="mt-4 space-y-2 text-sm text-muted-foreground"><p className="flex items-center gap-2"><CalendarDays/>{e.date}</p><p className="flex items-center gap-2"><MapPin/>{e.location}</p>{register&&<p className="flex items-center gap-2"><UsersRound/>{e.spots} spots left</p>}</div><Button className="mt-5 w-full" variant={register?"default":"outline"} asChild><Link href={`/events/${e.id}${register?"?view=student":""}`}>{register?"Register":"View details"}</Link></Button></div></article>)}</div>; }
 function StatCard({ label,value,icon,trend }: {label:string;value:string;icon:any;trend?:string}) { return <div className="stat-card"><div className="flex items-start justify-between"><div><p className="text-sm font-medium text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p>{trend&&<p className="mt-2 text-xs font-medium text-success"><TrendingUp className="mr-1 inline size-3"/>{trend}</p>}</div><span className="grid size-11 place-items-center rounded-lg bg-primary-soft text-primary">{icon}</span></div></div>; }
 function Section({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}) { return <section className="section-panel"><div className="mb-5 flex items-center justify-between"><h2 className="section-title">{title}</h2>{action}</div>{children}</section>; }
 function AssignConcernDialog({ concern }: { concern: typeof concerns[number] }) { const [assignee,setAssignee]=useState(concern.assignee); return <Dialog><DialogTrigger asChild><Button variant="ghost" size="icon" aria-label={`Assign ${concern.subject}`}><UserRound/></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Assign concern</DialogTitle><DialogDescription>Choose the personnel team responsible for {concern.id}.</DialogDescription></DialogHeader><div className="rounded-md border border-border bg-muted/50 p-4"><p className="text-sm font-semibold">{concern.subject}</p><p className="mt-1 text-xs text-muted-foreground">Submitted by {concern.studentName} · {concern.category}</p></div><FormField label="Assign to personnel"><select className="field-select w-full" value={assignee} onChange={e=>setAssignee(e.target.value)}><option>Unassigned</option><option>Facilities Team</option><option>Student Services</option><option>Safety Office</option><option>Academic Affairs</option></select></FormField><div className="flex items-start gap-3 rounded-md bg-primary-soft p-3 text-sm text-primary"><Bell className="mt-0.5 shrink-0"/><p>The selected team will be notified and can update the concern immediately.</p></div><DialogFooter><Button onClick={()=>toast.success(`${concern.id} assigned to ${assignee}`)}>Confirm assignment</Button></DialogFooter></DialogContent></Dialog>; }
@@ -130,26 +114,64 @@ function ConcernsTable({ admin=false, staff=false, items=[] }: { admin?:boolean;
 }
 function ChangeRoleDialog({ name, currentRole }: { name:string; currentRole:string }) { const [role,setRole]=useState(currentRole); return <Dialog><DialogTrigger asChild><Button variant="ghost" size="icon" aria-label={`Change role for ${name}`}><Pencil/></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Change account role</DialogTitle><DialogDescription>Update the permissions available to {name}.</DialogDescription></DialogHeader><div className="flex items-center gap-3 rounded-md border border-border p-4"><span className="avatar">{name.split(" ").map(x=>x.charAt(0)).join("")}</span><div><p className="font-semibold">{name}</p><p className="text-xs text-muted-foreground">Current role: {currentRole}</p></div></div><FormField label="New role"><select className="field-select w-full" value={role} onChange={e=>setRole(e.target.value)}><option>Student</option><option>Personnel</option><option>Admin</option></select></FormField><div className="flex items-start gap-3 rounded-md bg-warning-soft p-3 text-sm text-warning"><AlertCircle className="mt-0.5 shrink-0"/><p>Permission changes take effect immediately. Admin access includes user and campus-wide management.</p></div><DialogFooter><Button onClick={()=>toast.success(`${name} is now ${role}`)}>Confirm role change</Button></DialogFooter></DialogContent></Dialog>; }
 function ManagementTable({kind, data}:{kind:"announcements"|"events"|"lost"|"users"; data?: any[]}) {
- // Use real data if provided and not empty, otherwise use mock data
-  const rows = data && data.length > 0
-    ? kind === "announcements"
-      ? data.map((a: any) => [a.title, a.category, a.date, a.status || "Published"])
-      : kind === "events"
-        ? data.map((e: any) => [e.title, e.location, e.date, `${e.cap - e.spots} registered`])
-        : kind === "lost"
-          ? data.map((x: any) => [x.name, x.type, x.date, x.status])
-          : data.map((u: any) => [u.full_name || `${u.first_name} ${u.last_name}`, u.email, u.role, u.status || "Active"])
-    : kind === "announcements"
-      ? announcements.map((a, i) => [a.title, a.category, a.date, i === 3 ? "Draft" : "Published"])
-      : kind === "events"
-        ? events.map(e => [e.title, e.location, e.date, `${e.cap - e.spots} registered`])
-        : kind === "lost"
-          ? lostItems.map(x => [x.name, x.type, x.date, x.status])
-          : [["Maya Santos", "maya.santos@campus.edu", "Student", "Active"], ["Alex Rivera", "alex.rivera@campus.edu", "Personnel", "Active"], ["Dr. Ana Lim", "ana.lim@campus.edu", "Admin", "Active"], ["Noah Tan", "noah.tan@campus.edu", "Student", "Deactivated"]];
+  // Use real data if provided, otherwise show empty state
+  const rows = (data || []).map((item) => {
+    if (kind === "announcements") {
+      return [item.title, item.category, item.date, item.status || "Published"];
+    } else if (kind === "events") {
+      return [item.title, item.location, item.date, `${item.cap - item.spots} registered`];
+    } else if (kind === "lost") {
+      return [item.name, item.type, item.date, item.status];
+    } else { // users
+      return [item.full_name || `${item.first_name} ${item.last_name}`, item.email, item.role, item.status || "Active"];
+    }
+  });
   return <div className="table-shell">{rows.map((r,i)=>{ const [name="", detail="", date="", status="Open"] = r; return <div key={i} className="data-grid-row md:grid-cols-[1.8fr_1fr_1fr_1fr_auto]"><div className="flex items-center gap-3">{kind==="users"&&<span className="grid size-9 place-items-center rounded-full bg-primary-soft font-semibold text-primary">{name.split(" ").map(x=>x.charAt(0)).join("")}</span>}<span className="font-semibold">{name}</span></div><div>{detail}</div><div>{date}</div><div><StatusBadge status={status}/></div><div className="flex gap-1">{kind==="users"?<ChangeRoleDialog name={name} currentRole={date}/>:<Button variant="ghost" size="icon" aria-label={`Edit ${name}`} onClick={()=>toast("Edit panel opened")}><Pencil/></Button>}<Button variant="ghost" size="icon" aria-label={`More options for ${name}`} onClick={()=>toast("More actions opened")}><MoreHorizontal/></Button></div></div>})}</div>;
 }
 function MiniChart({type="bar"}:{type?:"bar"|"line"|"donut"}) { const vals=[42,64,48,76,58,88,72]; return <div className="mt-5 flex h-44 items-end gap-3 border-b border-border px-2 pb-0">{type==="donut"?<div className="mx-auto mb-5 grid size-36 place-items-center rounded-full bg-chart-ring"><div className="grid size-20 place-items-center rounded-full bg-card text-center"><span><strong className="block text-2xl">78%</strong><small className="text-muted-foreground">resolved</small></span></div></div>:vals.map((v,i)=><div key={i} className="flex h-full flex-1 items-end"><span className={cn("w-full rounded-t-sm",type==="line"?"bg-accent":"bg-primary/75")} style={{height:`${v}%`}}/></div>)}</div>; }
-function AdminDashboard({reports=false}:{reports?:boolean}) { return <AppShell role="admin" title={reports?"Reports & insights":"Good afternoon, Dr. Lim"} subtitle={reports?"Understand service performance across the campus.":"Here’s what’s happening across CampusConnect today."} actions={reports?<Button onClick={()=>toast.success("Report export started")}><Download/>Export CSV/PDF</Button>:undefined}><div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><StatCard label={reports?"Concerns resolved":"Total users"} value={reports?"184":"4,892"} icon={UsersRound} trend="8.4% this month"/><StatCard label="Active concerns" value="38" icon={MessageSquareText}/><StatCard label="Upcoming events" value="12" icon={CalendarDays}/><StatCard label="Open item reports" value="27" icon={PackageSearch}/></div>{reports&&<Filters search="Filter report data"/>}<div className="grid gap-6 xl:grid-cols-2"><Section title="Concerns by status"><div className="flex gap-4 text-xs text-muted-foreground"><span>● Pending</span><span>● In progress</span><span>● Resolved</span></div><MiniChart/></Section><Section title={reports?"Lost & found resolution rate":"New user signups"}><MiniChart type={reports?"donut":"line"}/></Section>{reports&&<Section title="Events by attendance"><MiniChart/></Section>}</div></AppShell>; }
+function AdminDashboard({reports=false, stats, concernsByStatus, eventsAttendance, lostFoundResolution}:{reports?:boolean; stats?:{totalUsers:number; activeConcerns:number; upcomingEvents:number; openItems:number}; concernsByStatus?:Array<{status:string; count:number}>; eventsAttendance?:Array<{title:string; capacity:number; event_registrations:Array<{count:number}>}>; lostFoundResolution?:Array<{status:string; count:number}>}) {
+  return <AppShell role="admin" title={reports?"Reports & insights":"Good afternoon, Dr. Lim"} subtitle={reports?"Understand service performance across the campus.":"Here’s what’s happening across CampusConnect today."} actions={reports?<Button onClick={()=>toast.success("Report export started")}><Download/>Export CSV/PDF</Button>:undefined}>
+    <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <StatCard label={reports?"Concerns resolved":"Total users"} value={stats?.totalUsers ?? 0} icon={UsersRound} trend="8.4% this month"/>
+      <StatCard label="Active concerns" value={stats?.activeConcerns ?? 0} icon={MessageSquareText}/>
+      <StatCard label="Upcoming events" value={stats?.upcomingEvents ?? 0} icon={CalendarDays}/>
+      <StatCard label="Open item reports" value={stats?.openItems ?? 0} icon={PackageSearch}/>
+    </div>
+    {reports&&<Filters search="Filter report data"/>}
+    <div className="grid gap-6 xl:grid-cols-2">
+      <Section title="Concerns by status">
+        <div className="flex gap-4 text-xs text-muted-foreground">
+          {(concernsByStatus || []).map((item) => (
+            <span key={item.status}>● {item.status}</span>
+          ))}
+        </div>
+        {(concernsByStatus || []).length > 0 ? <MiniChart/> : null}
+      </Section>
+      <Section title={reports?"Lost & found resolution rate":"New user signups"}>
+        {reports ? (
+          <>
+            <div className="flex gap-4 text-xs text-muted-foreground">
+              {(lostFoundResolution || []).map((item) => (
+                <span key={item.status}>● {item.status}</span>
+              ))}
+            </div>
+            <MiniChart type="donut"/>
+          </>
+        ) : (
+          <>
+            <div className="flex gap-4 text-xs text-muted-foreground">
+              <span>● New users this month</span>
+            </div>
+            <MiniChart type="line"/>
+          </>
+        )}
+      </Section>
+      {reports&&<Section title="Events by attendance">
+        <MiniChart/>
+      </Section>}
+    </div>
+  </AppShell>;
+}
 function Thread({staff=false}:{staff?:boolean}) { return <AppShell role={staff?"staff":"student"} title="Air conditioning in Room 304" subtitle="Concern CC-1048 · Facility"><div className="grid gap-6 xl:grid-cols-[1fr_320px]"><Section title="Conversation"><div className="space-y-6"><div className="thread-item"><span className="avatar">MS</span><div><div className="flex flex-wrap items-center gap-2"><strong>Maya Santos</strong><span className="text-xs text-muted-foreground">Sep 24 · 10:18 AM</span></div><p className="mt-2 text-sm leading-6 text-muted-foreground">The air conditioning in Room 304 has not been working since Monday. Our afternoon classes have become uncomfortable.</p></div></div><div className="thread-item"><span className="avatar bg-success-soft text-success"><ShieldCheck/></span><div><div className="flex flex-wrap items-center gap-2"><strong>Facilities Team</strong><span className="text-xs text-muted-foreground">Sep 24 · 2:40 PM</span></div><p className="mt-2 text-sm leading-6 text-muted-foreground">Thanks for reporting this. A technician has inspected the unit and replacement parts are scheduled for tomorrow.</p></div></div></div><div className="mt-6 border-t border-border pt-5"><Textarea placeholder={staff?"Reply to the student…":"Add a follow-up comment…"}/><div className="mt-3 flex justify-end"><Button onClick={()=>toast.success("Reply sent")}><Send/>{staff?"Send response":"Add comment"}</Button></div></div></Section><Section title="Concern details"><dl className="detail-list"><div><dt>Status</dt><dd>{staff?<select className="field-select w-full"><option>In Progress</option><option>Pending</option><option>Resolved</option></select>:<StatusBadge status="In Progress"/>}</dd></div><div><dt>Category</dt><dd>Facility</dd></div><div><dt>Submitted</dt><dd>Sep 24, 2026</dd></div><div><dt>Assigned to</dt><dd>Facilities Team</dd></div></dl></Section></div></AppShell>; }
 function FormField({label,children,note}:{label:string;children:ReactNode;note?:string}) {return <label className="block"><span className="mb-2 block text-sm font-semibold">{label}</span>{children}{note&&<span className="mt-1.5 block text-xs text-muted-foreground">{note}</span>}</label>}
 function FormPage({lost=false}:{lost?:boolean}) { const [mode,setMode]=useState("Lost"); return <AppShell role="student" title={lost?"Report a lost or found item":"Submit a concern"} subtitle={lost?"Help reunite campus items with their owners.":"Tell us what happened and the right team will follow up."}><div className="max-w-3xl"><Section title={lost?"Item details":"Concern details"}><form className="space-y-5" onSubmit={e=>{e.preventDefault();toast.success(lost?"Item report submitted":"Concern submitted successfully")}}>{lost&&<div className="segmented">{["Lost","Found"].map(x=><Button type="button" key={x} variant={mode===x?"default":"ghost"} onClick={()=>setMode(x)}>{x}</Button>)}</div>}<div className="grid gap-5 sm:grid-cols-2"><FormField label={lost?"Item name":"Category"}>{lost?<Input placeholder="e.g. Black umbrella"/>:<select className="field-select w-full"><option>Academic</option><option>Facility</option><option>Administrative</option><option>Other</option></select>}</FormField><FormField label={lost?"Category":"Subject"}>{lost?<select className="field-select w-full"><option>Personal item</option><option>Electronics</option><option>Documents</option></select>:<Input placeholder="Briefly summarize your concern"/>}</FormField></div>{lost&&<div className="grid gap-5 sm:grid-cols-2"><FormField label="Location"><Input placeholder="Where was it lost or found?"/></FormField><FormField label="Date"><Input type="date"/></FormField></div>}<FormField label="Description"><Textarea className="min-h-36" placeholder="Add helpful details…"/></FormField><FormField label={lost?"Photo":"Attachment (optional)"} note="PNG, JPG or PDF up to 10 MB"><button type="button" className="upload-zone"><Upload/><span>{lost?"Upload a clear photo":"Drop a file here or browse"}</span></button></FormField><div className="flex justify-end"><Button size="lg" type="submit"><Send/>{lost?"Submit report":"Submit concern"}</Button></div></form></Section></div></AppShell> }
@@ -235,9 +257,122 @@ function AuthPage({ signup = false }: { signup?: boolean }) {
   );
 }
 function ForgotPassword(){const[sent,setSent]=useState(false);return <div className="auth-bg flex min-h-screen flex-col"><div className="px-5 pt-5 sm:px-8"><Brand/></div><div className="flex flex-1 items-center justify-center px-5 py-12"><div className="auth-card animate-rise">{sent?<div className="text-center"><span className="mx-auto grid size-14 place-items-center rounded-full bg-success-soft text-success"><CheckCircle2 className="size-7"/></span><h1 className="mt-5 text-2xl font-bold">Check your email</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">If an account matches that address, we sent instructions to reset your password.</p><Button className="mt-7 w-full" asChild><Link href="/login"><ArrowLeft/>Back to login</Link></Button></div>:<><div className="text-center"><span className="mx-auto grid size-12 place-items-center rounded-xl bg-primary-soft text-primary"><KeyRound/></span><h1 className="mt-5 text-2xl font-bold">Reset your password</h1><p className="mt-2 text-sm text-muted-foreground">Enter your campus email and we’ll send reset instructions.</p></div><form className="mt-7 space-y-5" onSubmit={e=>{e.preventDefault();setSent(true)}}><AuthField label="Campus email" type="email" placeholder="you@campus.edu" icon={Mail}/><Button className="h-11 w-full" type="submit">Send reset link<ArrowRight/></Button></form><Link href="/login" className="mt-6 flex items-center justify-center gap-2 text-sm font-semibold text-primary"><ArrowLeft/>Back to login</Link></>}</div></div></div>}
-function Landing(){return <div className="bg-background"><PublicNav/><main><section className="hero-section"><div className="hero-grid mx-auto max-w-7xl px-5 py-20 lg:px-8 lg:py-28"><div className="animate-rise"><span className="eyebrow"><Sparkles/>Your campus, connected</span><h1 className="mt-6 max-w-3xl text-5xl font-bold leading-[1.08] sm:text-6xl lg:text-7xl">All your campus updates, <span className="text-primary">in one place.</span></h1><p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">Stay informed, join events, raise concerns, and reconnect lost items with one trusted campus hub.</p><div className="mt-8 flex flex-wrap gap-3"><Button size="lg" asChild><Link href="/login">Log in</Link></Button><Button size="lg" variant="outline" asChild><Link href="/signup">Sign up</Link></Button></div><div className="mt-12 flex flex-wrap gap-6 text-sm text-muted-foreground"><span className="flex items-center gap-2"><CheckCircle2 className="text-success"/>Verified campus updates</span><span className="flex items-center gap-2"><CheckCircle2 className="text-success"/>Fast service requests</span></div></div><div className="hero-preview animate-float"><div className="mb-5 flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Good morning, Maya</p><h2 className="text-xl font-bold">Campus overview</h2></div><span className="grid size-10 place-items-center rounded-full bg-primary-soft font-semibold text-primary">MS</span></div><div className="space-y-3">{announcements.slice(0,3).map((a,i)=><div className="flex gap-3 rounded-md border border-border bg-background p-4" key={a.id}><span className={cn("grid size-10 shrink-0 place-items-center rounded-md",i===0?"bg-primary-soft text-primary":i===1?"bg-success-soft text-success":"bg-warning-soft text-warning")}><Megaphone/></span><div><p className="text-sm font-semibold">{a.title}</p><p className="mt-1 text-xs text-muted-foreground">{a.date}</p></div></div>)}</div></div></div></section><section className="mx-auto max-w-7xl px-5 py-20 lg:px-8"><div className="mb-10 max-w-2xl"><p className="eyebrow">Everything you need</p><h2 className="mt-4 text-3xl font-bold sm:text-4xl">Campus life, simplified.</h2></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[[Megaphone,"Announcements","Never miss an important campus update."],[CalendarDays,"Events","Discover and register for campus activities."],[MessageSquareText,"Concerns","Reach the right team and track progress."],[PackageSearch,"Lost & Found","Report and recover misplaced items."]].map(([Icon,t,d]:any)=><div className="feature-card" key={t}><span className="feature-icon"><Icon/></span><h3 className="mt-5 font-bold">{t}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{d}</p></div>)}</div></section><section className="border-y border-border bg-muted/45"><div className="mx-auto max-w-7xl px-5 py-20 lg:px-8"><div className="mb-8 flex items-end justify-between"><div><p className="eyebrow">From the campus</p><h2 className="mt-3 text-3xl font-bold">Latest announcements</h2></div><Link href="/announcements" className="hidden font-semibold text-primary sm:block">View all →</Link></div><div className="grid gap-4 md:grid-cols-3">{announcements.slice(0,3).map(a=><article className="content-card" key={a.id}><span className="category-badge">{a.category}</span><h3 className="mt-4 font-bold">{a.title}</h3><p className="mt-3 text-sm leading-6 text-muted-foreground">{a.excerpt}</p></article>)}</div></div></section></main><footer className="border-t border-border"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 px-5 py-10 sm:flex-row lg:px-8"><div><Brand/><p className="mt-3 text-sm text-muted-foreground">Northbridge University · Student Services</p></div><div className="text-sm text-muted-foreground"><p className="font-semibold text-foreground">Need help?</p><p className="mt-2">studentservices@northbridge.edu</p><p>+65 6123 4567</p></div></div></footer></div>}
-function PublicList({eventsPage=false}:{eventsPage?:boolean}) {return <div className="min-h-screen"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-12 lg:px-8"><PageHeader title={eventsPage?"Campus events":"Announcements"} text={eventsPage?"Discover workshops, activities, and moments to connect.":"News and important information from across the university."}/><Filters search={eventsPage?"Search events":"Search announcements"}/>{eventsPage?<EventCards/>:<AnnouncementCards/>}<div className="mt-8 flex justify-center gap-2"><Button variant="outline" size="icon">1</Button><Button variant="ghost" size="icon">2</Button><Button variant="ghost" size="icon">3</Button></div></main></div>}
-function StudentDashboard(){return <AppShell role="student" title="Good afternoon, Maya" subtitle="Here’s what’s happening around campus today."><div className="mb-6 grid gap-4 sm:grid-cols-3"><StatCard label="Unread announcements" value="4" icon={Megaphone}/><StatCard label="Upcoming events" value="3" icon={CalendarCheck}/><StatCard label="Open concerns" value="2" icon={MessageSquareText}/></div><div className="grid gap-6 xl:grid-cols-2"><Section title="Recent announcements" action={<Link href="/announcements" className="section-link">View all</Link>}><div className="divide-y divide-border">{announcements.slice(0,3).map(a=><div className="py-3 first:pt-0" key={a.id}><span className="category-badge">{a.category}</span><p className="mt-2 font-semibold">{a.title}</p><p className="mt-1 text-xs text-muted-foreground">{a.date}</p></div>)}</div></Section><Section title="Upcoming events" action={<Link href="/events" className="section-link">View all</Link>}><div className="space-y-3">{events.slice(0,3).map(e=><div className="flex items-center gap-3" key={e.id}><span className="grid size-12 shrink-0 place-items-center rounded-md bg-primary-soft text-xs font-bold text-primary">{e.day}</span><div><p className="font-semibold">{e.title}</p><p className="text-xs text-muted-foreground">{e.location}</p></div></div>)}</div></Section><div className="xl:col-span-2"><Section title="My open concerns" action={<Link href="/concerns" className="section-link">View all</Link>}><ConcernsTable/></Section></div></div></AppShell>}
+function Landing() {
+  const [announcementsData, setAnnouncementsData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchAnnouncements();
+  }, []);
+
+  const fetchAnnouncements = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (error) throw error;
+      setAnnouncementsData(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load announcements');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div className="bg-background"><PublicNav/><main><div className="min-h-screen flex items-center justify-center">Loading...</div></main></div>;
+  if (error) return <div className="bg-background"><PublicNav/><main><div className="min-h-screen flex items-center justify-center">Error: {error}</div></main></div>;
+
+  return <div className="bg-background"><PublicNav/><main><section className="hero-section"><div className="hero-grid mx-auto max-w-7xl px-5 py-20 lg:px-8 lg:py-28"><div className="animate-rise"><span className="eyebrow"><Sparkles/>Your campus, connected</span><h1 className="mt-6 max-w-3xl text-5xl font-bold leading-[1.08] sm:text-6xl lg:text-7xl">All your campus updates, <span className="text-primary">in one place.</span></h1><p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">Stay informed, join events, raise concerns, and reconnect lost items with one trusted campus hub.</p><div className="mt-8 flex flex-wrap gap-3"><Button size="lg" asChild><Link href="/login">Log in</Link></Button><Button size="lg" variant="outline" asChild><Link href="/signup">Sign up</Link></Button></div><div className="mt-12 flex flex-wrap gap-6 text-sm text-muted-foreground"><span className="flex items-center gap-2"><CheckCircle2 className="text-success"/>Verified campus updates</span><span className="flex items-center gap-2"><CheckCircle2 className="text-success"/>Fast service requests</span></div></div><div className="hero-preview animate-float"><div className="mb-5 flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Good morning, Maya</p><h2 className="text-xl font-bold">Campus overview</h2></div><span className="grid size-10 place-items-center rounded-full bg-primary-soft font-semibold text-primary">MS</span></div><div className="space-y-3">{announcementsData.slice(0,3).map((a,i)=><div className="flex gap-3 rounded-md border border-border bg-background p-4" key={a.id}><span className={cn("grid size-10 shrink-0 place-items-center rounded-md",i===0?"bg-primary-soft text-primary":i===1?"bg-success-soft text-success":"bg-warning-soft text-warning")}><Megaphone/></span><div><p className="text-sm font-semibold">{a.title}</p><p className="mt-1 text-xs text-muted-foreground">{a.date}</p></div></div>)}</div></div></div></section><section className="mx-auto max-w-7xl px-5 py-20 lg:px-8"><div className="mb-10 max-w-2xl"><p className="eyebrow">Everything you need</p><h2 className="mt-4 text-3xl font-bold sm:text-4xl">Campus life, simplified.</h2></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[[Megaphone,"Announcements","Never miss an important campus update."],[CalendarDays,"Events","Discover and register for campus activities."],[MessageSquareText,"Concerns","Reach the right team and track progress."],[PackageSearch,"Lost & Found","Report and recover misplaced items."]].map(([Icon,t,d]:any)=><div className="feature-card" key={t}><span className="feature-icon"><Icon/></span><h3 className="mt-5 font-bold">{t}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{d}</p></div>)}</div></section><section className="border-y border-border bg-muted/45"><div className="mx-auto max-w-7xl px-5 py-20 lg:px-8"><div className="mb-8 flex items-end justify-between"><div><p className="eyebrow">From the campus</p><h2 className="mt-3 text-3xl font-bold">Latest announcements</h2></div><Link href="/announcements" className="hidden font-semibold text-primary sm:block">View all →</Link></div><div className="grid gap-4 md:grid-cols-3">{announcementsData.slice(0,3).map(a=><article className="content-card" key={a.id}><span className="category-badge">{a.category}</span><h3 className="mt-4 font-bold">{a.title}</h3><p className="mt-3 text-sm leading-6 text-muted-foreground">{a.excerpt}</p></article>)}</div></div></section></main><footer className="border-t border-border"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 px-5 py-10 sm:flex-row lg:px-8"><div><Brand/><p className="mt-3 text-sm text-muted-foreground">Northbridge University · Student Services</p></div><div className="text-sm text-muted-foreground"><p className="font-semibold text-foreground">Need help?</p><p className="mt-2">studentservices@northbridge.edu</p><p>+65 6123 4567</p></div></div></footer></div>;
+}
+function PublicList({eventsPage=false}:{eventsPage?:boolean}) {
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchData();
+  }, [eventsPage]);
+
+  const fetchData = async () => {
+    try {
+      if (eventsPage) {
+        // Fetch events
+        const { data: eventData, error } = await supabase
+          .from('events')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setData(eventData);
+      } else {
+        // Fetch announcements
+        const { data: announcementData, error } = await supabase
+          .from('announcements')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setData(announcementData);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div className="min-h-screen"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-12 lg:px-8"><div className="min-h-screen flex items-center justify-center">Loading...</div></main></div>;
+  if (error) return <div className="min-h-screen"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-12 lg:px-8"><div className="min-h-screen flex items-center justify-center">Error: {error}</div></main></div>;
+
+  return <div className="min-h-screen"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-12 lg:px-8"><PageHeader title={eventsPage?"Campus events":"Announcements"} text={eventsPage?"Discover workshops, activities, and moments to connect.":"News and important information from across the university."}/><Filters search={eventsPage?"Search events":"Search announcements"}/>{eventsPage?<EventCard items={data}/> : <AnnouncementCards items={data}/>}<div className="mt-8 flex justify-center gap-2"><Button variant="outline" size="icon">1</Button><Button variant="ghost" size="icon">2</Button><Button variant="ghost" size="icon">3</Button></div></main></div>;
+}
+function StudentDashboard() {
+  const [announcementsData, setAnnouncementsData] = useState<any[]>([]);
+  const [eventsData, setEventsData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      // Fetch announcements
+      const { data: announcementData, error: announcementError } = await supabase
+        .from('announcements')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+      if (announcementError) throw announcementError;
+      setAnnouncementsData(announcementData);
+
+      // Fetch events
+      const { data: eventData, error: eventError } = await supabase
+        .from('events')
+        .select('*')
+        .order('start_time', { ascending: true })
+        .limit(3);
+
+      if (eventError) throw eventError;
+      setEventsData(eventData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <AppShell role="student" title="Good afternoon, Maya" subtitle="Here’s what’s happening around campus today."><div className="min-h-screen flex items-center justify-center">Loading...</div></AppShell>;
+  if (error) return <AppShell role="student" title="Good afternoon, Maya" subtitle="Here’s what’s happening around campus today."><div className="min-h-screen flex items-center justify-center">Error: {error}</div></AppShell>;
+
+  return <AppShell role="student" title="Good afternoon, Maya" subtitle="Here’s what’s happening around campus today."><div className="mb-6 grid gap-4 sm:grid-cols-3"><StatCard label="Unread announcements" value="4" icon={Megaphone}/><StatCard label="Upcoming events" value="3" icon={CalendarCheck}/><StatCard label="Open concerns" value="2" icon={MessageSquareText}/></div><div className="grid gap-6 xl:grid-cols-2"><Section title="Recent announcements" action={<Link href="/announcements" className="section-link">View all</Link>}><div className="divide-y divide-border">{announcementsData.slice(0,3).map(a=><div className="py-3 first:pt-0" key={a.id}><span className="category-badge">{a.category}</span><p className="mt-2 font-semibold">{a.title}</p><p className="mt-1 text-xs text-muted-foreground">{a.date}</p></div>)}</div></Section><Section title="Upcoming events" action={<Link href="/events" className="section-link">View all</Link>}><div className="space-y-3">{eventsData.slice(0,3).map(e=><div className="flex items-center gap-3" key={e.id}><span className="grid size-12 shrink-0 place-items-center rounded-md bg-primary-soft text-xs font-bold text-primary">{e.day}</span><div><p className="font-semibold">{e.title}</p><p className="text-xs text-muted-foreground">{e.location}</p></div></div>)}</div></Section><div className="xl:col-span-2"><Section title="My open concerns" action={<Link href="/concerns" className="section-link">View all</Link>}><ConcernsTable/></Section></div></div></AppShell>;
+}
 function useGuest(){const[signedIn,setSignedIn]=useState(false);useEffect(()=>{setSignedIn(window.location.search.includes("view=student")||window.sessionStorage.getItem("cc-session")==="1")},[]);return !signedIn}
 function Frame({title,subtitle,actions,children}:{title:string;subtitle?:string;actions?:ReactNode;children:ReactNode}){const guest=useGuest();if(!guest)return <AppShell role="student" title={title} {...(subtitle?{subtitle}:{})} actions={actions}>{children}</AppShell>;return <PublicShell><div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end animate-rise"><div><h1 className="page-title">{title}</h1>{subtitle&&<p className="mt-2 text-muted-foreground">{subtitle}</p>}</div><Button variant="outline" asChild><Link href="/login">Log in for full access<ArrowRight/></Link></Button></div>{children}</PublicShell>}
 function loginPrompt(){toast.info("Please log in to continue",{action:{label:"Log in",onClick:()=>{window.location.href="/login"}}})}
@@ -316,13 +451,297 @@ function LostFound({ items=[] }:{ items?: typeof lostItems }) {
 }
 function LostDetail(){const guest=useGuest();return <Frame title="Blue insulated bottle" subtitle="Lost item · Reported Sep 24"><div className="grid gap-6 xl:grid-cols-[1fr_420px]"><div className="grid min-h-96 place-items-center rounded-md bg-muted text-9xl">🥤</div><Section title="Item details"><StatusBadge status="Open"/><p className="mt-5 leading-7 text-muted-foreground">A navy blue insulated bottle with several small travel stickers. Last seen after the afternoon laboratory session.</p><dl className="detail-list mt-6"><div><dt>Location</dt><dd>Science Building, Room 205</dd></div><div><dt>Date reported</dt><dd>Sep 24, 2026</dd></div><div><dt>Category</dt><dd>Personal item</dd></div></dl><Button className="mt-6 w-full" size="lg" onClick={()=>guest?loginPrompt():toast.success("Message request sent")}><Mail/>Message reporter</Button></Section></div></Frame>}
 function Profile(){return <AppShell role="student" title="My profile" subtitle="Keep your contact information up to date."><div className="max-w-3xl"><Section title="Profile information"><div className="mb-7 flex items-center gap-4"><span className="relative grid size-20 place-items-center rounded-full bg-primary-soft text-xl font-bold text-primary">MS<button className="absolute -bottom-1 -right-1 grid size-8 place-items-center rounded-full bg-primary text-primary-foreground"><Camera className="size-4"/></button></span><div><p className="font-bold">Maya Santos</p><StatusBadge status="Student"/></div></div><form className="grid gap-5 sm:grid-cols-2" onSubmit={e=>{e.preventDefault();toast.success("Profile saved")}}><FormField label="Full name"><Input defaultValue="Maya Santos"/></FormField><FormField label="Email" note="Managed by your school account"><Input defaultValue="maya.santos@campus.edu" readOnly/></FormField><FormField label="Contact number"><Input defaultValue="+65 9123 4567"/></FormField><FormField label="Account role"><Input defaultValue="Student" readOnly/></FormField><div className="sm:col-span-2"><Button type="submit">Save changes</Button></div></form></Section></div></AppShell>}
-function Notifications(){const[read,setRead]=useState(false);const items=[[Megaphone,"New enrollment schedule posted","10 minutes ago"],[MessageSquareText,"Facilities Team replied to your concern","2 hours ago"],[CalendarDays,"Innovation Week starts in 9 days","Yesterday"],[PackageSearch,"A found item may match your report","Sep 23"]] as const;return <AppShell role="student" title="Notifications" subtitle="Updates that need your attention." actions={<Button variant="outline" onClick={()=>{setRead(true);toast.success("All notifications marked as read")}}><Check/>Mark all as read</Button>}><div className="section-panel p-0">{items.map(([Icon,text,time],i)=><div className="flex gap-4 border-b border-border p-5 last:border-0" key={text}><span className="grid size-10 shrink-0 place-items-center rounded-md bg-primary-soft text-primary"><Icon/></span><div className="flex-1"><p className={cn("text-sm",!read&&i<2&&"font-bold")}>{text}</p><p className="mt-1 text-xs text-muted-foreground">{time}</p></div>{!read&&i<2&&<span className="mt-2 size-2 rounded-full bg-primary"/>}</div>)}</div></AppShell>}
+function Notifications(){const { notifications, loading, error, markAsRead, markAllAsRead, unreadCount } = useNotifications();
+  if (loading) return <AppShell role="student" title="Notifications" subtitle="Updates that need your attention." actions={<Button variant="outline" onClick={markAllAsRead} disabled={unreadCount === 0}><Check/>Mark all as read</Button>}><div className="section-panel p-0 text-center py-8">Loading notifications...</div></AppShell>;
+  if (error) return <AppShell role="student" title="Notifications" subtitle="Updates that need your attention." actions={<Button variant="outline" onClick={markAllAsRead} disabled={unreadCount === 0}><Check/>Mark all as read</Button>}><div className="section-panel p-0">Error loading notifications: {error}</div></AppShell>;
+
+  return (
+    <AppShell role="student" title="Notifications" subtitle="Updates that need your attention." actions={<Button variant="outline" onClick={markAllAsRead} disabled={unreadCount === 0}><Check/>Mark all as read</Button>}>
+      <div className="section-panel p-0 space-y-4">
+        {notifications.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">No notifications yet.</p>
+          </div>
+        ) : (
+          <>
+            {notifications.map((notification) => (
+              <div
+                key={notification.id}
+                className={`border rounded-lg p-4 hover:border-primary/20 transition-border ${
+                  !notification.read ? 'bg-primary/5' : ''
+                }`}
+                onClick={() => {
+                  if (!notification.read) {
+                    markAsRead(notification.id);
+                  }
+                }}
+                style={{ cursor: notification.href ? 'pointer' : 'default' }}
+              >
+                <div className="flex items-start space-x-3">
+                  <div className="flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-full bg-primary/20 text-primary">
+                    {notification.type === 'announcement' && 'A'}
+                    {notification.type === 'concern' && 'C'}
+                    {notification.type === 'event' && 'E'}
+                    {notification.type === 'lost_found' && 'L'}
+                    {notification.type === 'system' && 'S'}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <div className="flex justify-between items-start">
+                      <h3 className="font-semibold">{notification.title}</h3>
+                      <time className="text-xs text-muted-foreground">
+                        {new Date(notification.time).toLocaleString()}
+                      </time>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{notification.body}</p>
+                    {!notification.read && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                        Unread
+                      </span>
+                    )}
+                  </div>
+                </div>
+            ))}
+          </>
+        )}
+      </div>
+    </AppShell>
+  );
+}
 function StaffDashboard(){return <AppShell role="staff" title="Personnel dashboard" subtitle="Manage incoming requests and assigned work."><div className="mb-6 grid gap-4 sm:grid-cols-3"><StatCard label="Open concerns" value="24" icon={AlertCircle}/><StatCard label="In progress" value="11" icon={Clock3}/><StatCard label="Resolved this week" value="36" icon={CheckCircle2} trend="12% vs last week"/></div><Section title="Needs attention"><ConcernsTable staff/></Section></AppShell>}
 function StaffLost(){return <AppShell role="staff" title="Lost & Found management" subtitle="Review reports and update item status."><Filters search="Search reported items"/><ManagementTable kind="lost"/></AppShell>}
 function AdminList({kind}:{kind:"announcements"|"events"|"concerns"|"lost"|"users"}) {const labels={announcements:"Announcements",events:"Events",concerns:"Concerns",lost:"Lost & Found",users:"Users"};const title=labels[kind];return <AppShell role="admin" title={`Manage ${title}`} subtitle={`Review and manage ${title.toLowerCase()} across campus.`} actions={kind==="announcements"||kind==="events"?<CreateDialog kind={kind}/>:undefined}><Filters search={`Search ${title.toLowerCase()}`}/>{kind==="concerns"?<ConcernsTable admin/>:<ManagementTable kind={kind}/>}</AppShell>}
 
-function CreateDialog({kind}:{kind:"announcements"|"events"}){const ev=kind==="events";const[open,setOpen]=useState(false);const[title,setTitle]=useState("");const[publish,setPublish]=useState(true);const[img,setImg]=useState<string|null>(null);const save=(draft:boolean)=>{if(!title.trim()){toast.error("Please add a title");return}toast.success(`${ev?"Event":"Announcement"} ${draft?"saved as draft":"published"}`);setOpen(false);setTitle("");setImg(null)};return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button><Plus/>New {ev?"Event":"Announcement"}</Button></DialogTrigger><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Create {ev?"event":"announcement"}</DialogTitle><DialogDescription>Fill in the details below. Save as a draft or publish right away.</DialogDescription></DialogHeader><div className="space-y-4"><FormField label="Title"><Input value={title} onChange={e=>setTitle(e.target.value)} placeholder={ev?"e.g. Innovation Week 2026":"e.g. Enrollment schedule for Term 2"}/></FormField><div className="grid gap-4 sm:grid-cols-2"><FormField label="Category"><select className="field-select w-full">{(ev?["Academic","Arts & Culture","Sports","Careers","Community"]:["Academic","Campus Life","Financial Aid","Facilities","Safety"]).map(c=><option key={c}>{c}</option>)}</select></FormField>{ev?<FormField label="Capacity"><Input type="number" min={1} defaultValue={60}/></FormField>:<FormField label="Audience"><select className="field-select w-full"><option>Everyone (public)</option><option>Students only</option><option>Personnel only</option></select></FormField>}</div>{ev&&<><div className="grid gap-4 sm:grid-cols-2"><FormField label="Start date & time"><Input type="datetime-local"/></FormField><FormField label="End date & time"><Input type="datetime-local"/></FormField></div><FormField label="Location"><div className="relative"><MapPin className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="e.g. University Hall"/></div></FormField></>}<FormField label={ev?"Description":"Body"}><div className="rounded-md border border-input"><div className="flex gap-1 border-b border-border p-1.5">{["B","I","U","• List","Link"].map(t=><button type="button" key={t} className="rounded px-2 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground" onClick={()=>toast(`${t} formatting applied`)}>{t}</button>)}</div><Textarea className="min-h-32 border-0 shadow-none focus-visible:ring-0" placeholder={ev?"What will attendees do and learn?":"Write the full announcement…"}/></div></FormField><FormField label={ev?"Cover image":"Attached image (optional)"}><label className="upload-zone flex cursor-pointer flex-col items-center justify-center gap-2 p-6 text-center">{img?<img src={img} alt="Preview" className="max-h-40 rounded-md object-cover"/>:<><ImagePlus className="size-8 text-primary"/><span className="text-sm font-semibold">Click to upload</span><span className="text-xs text-muted-foreground">PNG or JPG, up to 5 MB</span></>}<input type="file" accept="image/*" className="sr-only" onChange={e=>{const f=e.target.files?.[0];if(f)setImg(URL.createObjectURL(f))}}/></label></FormField><label className="flex items-center justify-between rounded-md border border-border p-4"><span><strong className="block text-sm">Publish immediately</strong><small className="text-muted-foreground">{publish?"Visible to your audience as soon as you save.":"Saved as a draft only admins can see."}</small></span><button type="button" role="switch" aria-checked={publish} onClick={()=>setPublish(!publish)} className={cn("relative h-6 w-11 rounded-full transition-colors",publish?"bg-primary":"bg-muted")}><span className={cn("absolute top-0.5 size-5 rounded-full bg-background shadow transition-all",publish?"left-[22px]":"left-0.5")}/></button></label></div><DialogFooter className="gap-2"><Button variant="outline" onClick={()=>save(true)}>Save draft</Button><Button onClick={()=>save(!publish)}>{publish?"Publish":"Save"}</Button></DialogFooter></DialogContent></Dialog>}
-function Registrants(){const names=[["Maya Santos","maya.santos@campus.edu","Sep 20, 2026"],["Liam Cruz","liam.cruz@campus.edu","Sep 21, 2026"],["Nora Reyes","nora.reyes@campus.edu","Sep 22, 2026"]];return <AppShell role="admin" title="Innovation Week registrants" subtitle="42 of 60 seats filled." actions={<Button onClick={()=>toast.success("Registrant list downloaded")}><Download/>Export list</Button>}><Filters search="Search registered students" extra={false}/><div className="table-shell">{names.map((n,i)=><div className="data-grid-row md:grid-cols-3" key={i}><strong>{n[0]}</strong><span>{n[1]}</span><span>{n[2]}</span></div>)}</div></AppShell>}
+function CreateDialog({kind}:{kind:"announcements"|"events"}) {
+  const ev = kind === "events";
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [publish, setPublish] = useState(true);
+  const [img, setImg] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const { user } = useUser();
+
+  const save = async (draft: boolean) => {
+    if (!title.trim()) {
+      toast.error("Please add a title");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
+
+      if (ev) {
+        // Create event
+        const eventData = {
+          title,
+          category: "Academic", // Default, should come from form
+          location: "University Hall", // Default, should come from form
+          description: "", // Default, should come from form
+          start_time: new Date().toISOString(), // Default, should come from form
+          end_time: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // Default 2 hours later
+          capacity: 60, // Default, should come from form
+          cover_image_url: img ?? null,
+          created_by: user.id,
+          status: publish ? "Published" : "Draft"
+        };
+
+        const { data, error } = await supabase.from('events').insert(eventData).select().single();
+        if (error) throw error;
+
+        toast.success(`${draft ? "Event saved as draft" : "Event published!"}`);
+      } else {
+        // Create announcement
+        const announcementData = {
+          title,
+          category: "Academic", // Default, should come from form
+          body: "", // Default, should come from form
+          status: publish ? "Published" : "Draft",
+          audience: "Everyone", // Default, should come from form
+          image_url: img ?? null,
+          created_by: user.id
+        };
+
+        const { data, error } = await supabase.from('announcements').insert(announcementData).select().single();
+        if (error) throw error;
+
+        toast.success(`${draft ? "Announcement saved as draft" : "Announcement published!"}`);
+      }
+
+      setOpen(false);
+      setTitle("");
+      setImg(null);
+    } catch (err) {
+      toast.error(`Failed to save: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button>
+          <Plus/>New {ev ? "Event" : "Announcement"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Create {ev ? "event" : "announcement"}</DialogTitle>
+          <DialogDescription>Fill in the details below. Save as a draft or publish right away.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <FormField label="Title">
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder={ev ? "e.g. Innovation Week 2026" : "e.g. Enrollment schedule for Term 2"}/>
+          </FormField>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Category">
+              <select className="field-select w-full">
+                {(ev ? ["Academic", "Arts & Culture", "Sports", "Careers", "Community"] : ["Academic", "Campus Life", "Financial Aid", "Facilities", "Safety"]).map(c => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+            {ev ? (
+              <>
+                <FormField label="Capacity">
+                  <Input type="number" min={1} defaultValue={60}/>
+                </FormField>
+                <FormField label="Audience">
+                  <select className="field-select w-full">
+                    <option>Everyone (public)</option>
+                    <option>Students only</option>
+                    <option>Personnel only</option>
+                  </select>
+                </FormField>
+              </>
+            ) : (
+              <FormField label="Audience">
+                <select className="field-select w-full">
+                  <option>Everyone (public)</option>
+                  <option>Students only</option>
+                  <option>Personnel only</option>
+                </select>
+              </FormField>
+            )}
+          </div>
+          {ev && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField label="Start date & time">
+                  <Input type="datetime-local"/>
+                </FormField>
+                <FormField label="End date & time">
+                  <Input type="datetime-local"/>
+                </FormField>
+              </div>
+              <FormField label="Location">
+                <div className="relative">
+                  <MapPin className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/>
+                  <Input className="pl-9" placeholder="e.g. University Hall"/>
+                </div>
+              </FormField>
+            </>
+          )}
+          <FormField label={ev ? "Description" : "Body"}>
+            <div className="rounded-md border border-input">
+              <div className="flex gap-1 border-b border-border p-1.5">
+                {["B", "I", "U", "• List", "Link"].map(t => (
+                  <button type="button" key={t} className="rounded px-2 py-1 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground" onClick={() => toast(`${t} formatting applied`)}>{t}</button>
+                ))}
+              </div>
+              <Textarea className="min-h-32 border-0 shadow-none focus-visible:ring-0" placeholder={ev ? "What will attendees do and learn?" : "Write the full announcement…"}/>
+            </div>
+          </FormField>
+          <FormField label={ev ? "Cover image" : "Attached image (optional)"}>
+            <label className="upload-zone flex cursor-pointer flex-col items-center justify-center gap-2 p-6 text-center">
+              {img ? <img src={img} alt="Preview" className="max-h-40 rounded-md object-cover"/> : <>}
+              <ImagePlus className="size-8 text-primary"/>
+              <span className="text-sm font-semibold">Click to upload</span>
+              <span className="text-xs text-muted-foreground">PNG or JPG, up to 5 MB</span>
+              </>
+            </label>
+            <input type="file" accept="image/*" className="sr-only" onChange={e => {
+              const f = e.target.files?.[0];
+              if (f) setImg(URL.createObjectURL(f));
+            }}/>
+          </FormField>
+          <label className="flex items-center justify-between rounded-md border border-border p-4">
+            <span>
+              <strong className="block text-sm">Publish immediately</strong>
+              <small className="text-muted-foreground">{publish ? "Visible to your audience as soon as you save." : "Saved as a draft only admins can see."}</small>
+            </span>
+            <button type="button" role="switch" aria-checked={publish} onClick={() => setPublish(!publish)} className={cn("relative h-6 w-11 rounded-full transition-colors", publish ? "bg-primary" : "bg-muted")}>
+              <span className={cn("absolute top-0.5 size-5 rounded-full bg-background shadow transition-all", publish ? "left-[22px]" : "left-0.5")}/>
+            </button>
+          </label>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => save(true)} disabled={loading}>
+            Save draft
+          </Button>
+          <Button onClick={() => save(false)} disabled={loading}>
+            {publish ? "Publish" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+function Registrants() {
+  const [registrants, setRegistrants] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchRegistrants();
+  }, []);
+
+  const fetchRegistrants = async () => {
+    try {
+      // For now, we'll get registrants for a specific event (Innovation Week)
+      // In a real app, this might be parameterized or we might show registrants for all events
+      const { data, error } = await supabase
+        .from('event_registrations')
+        .select(`
+          id,
+          registered_at,
+          student:users!event_registrations_student_id_fkey (
+            full_name,
+            email
+          )
+        `)
+        .eq('event_id', 'innovation-week-2026') // This would need to be the actual event ID
+        .order('registered_at', { ascending: true });
+
+      if (error) throw error;
+      setRegistrants(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load registrants');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <CampusPage page="registrants" />;
+  if (error) return <CampusPage page="registrants" >Error loading registrants: {error}</CampusPage>;
+
+  return (
+    <AppShell role="admin" title="Innovation Week registrants" subtitle={`${registrants.length} of 60 seats filled.`} actions={<Button onClick={()=>toast.success("Registrant list downloaded")}><Download/>Export list</Button>}>
+      <Filters search="Search registered students" extra={false}/>
+      <div className="table-shell">
+        {registrants.map((reg, i)=><div className="data-grid-row md:grid-cols-3" key={reg.id}>
+          <strong>{reg.student?.[0]?.full_name}</strong>
+          <span>{reg.student?.[0]?.email}</span>
+          <span>{new Date(reg.registered_at).toLocaleDateString()}</span>
+        </div>)}
+      </div>
+    </AppShell>
+  );
+}
 function MyEvents(){return <AppShell role="student" title="My events" subtitle="Review and manage your registrations."><div className="space-y-4">{events.slice(0,2).map((e,i)=><div className="content-card flex flex-col justify-between gap-4 sm:flex-row sm:items-center" key={e.id}><div className="flex items-center gap-4"><span className="grid size-14 place-items-center rounded-md bg-primary-soft text-xs font-bold text-primary">{e.day}</span><div><h2 className="font-bold">{e.title}</h2><p className="mt-1 text-sm text-muted-foreground">{e.date} · {e.location}</p></div></div><div className="flex items-center gap-3"><StatusBadge status={i?"Past":"Upcoming"}/>{!i&&<Button variant="outline" onClick={()=>toast.success("Registration cancelled")}>Cancel registration</Button>}</div></div>)}</div></AppShell>}
 function AccessDenied(){return <div className="grid min-h-screen place-items-center bg-app px-5"><div className="max-w-md text-center"><span className="mx-auto grid size-20 place-items-center rounded-full bg-danger-soft text-danger"><LockKeyhole className="size-9"/></span><h1 className="mt-6 text-3xl font-bold">Access denied</h1><p className="mt-3 text-muted-foreground">Your account doesn’t have permission to view this area. Return to your dashboard to continue.</p><Button className="mt-7" asChild><Link href="/dashboard">Back to dashboard</Link></Button></div></div>}
 export function CampusPage({page}:{page:PageKey}) {

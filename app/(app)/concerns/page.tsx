@@ -59,9 +59,7 @@ export default function ConcernsPage() {
         updatedAt: concern.updatedAt,
         studentName: concern.student?.[0]?.full_name ?? '',
         studentEmail: concern.student?.[0]?.email ?? '',
-        assignedTeam: '', // TODO: Implement team assignment logic
         assignee: concern.assignee?.[0]?.full_name ?? null,
-        messages: [], // TODO: Fetch concern messages
         attachmentName: concern.attachment_url
           ? concern.attachment_url.split('/').pop()
           : null,

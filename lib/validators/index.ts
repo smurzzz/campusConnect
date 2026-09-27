@@ -105,6 +105,7 @@ export const lostFoundSchema = z.object({
   location: z.enum(CAMPUS_LOCATIONS, { message: "Choose a location" }),
   date: z.string().min(1, "Date is required"),
   description: z.string().trim().min(10, "Add a short description").max(500),
+  attachment: optionalAttachment,
 });
 
 /** Admin content creation. */
