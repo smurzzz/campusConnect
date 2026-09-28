@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { CampusPage } from "@/components/campus-page";
+import RegistrantsClient from "./registrants-client";
 
 export const metadata: Metadata = {
   title: "Registrants — CampusConnect",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function RegistrantsPage() {
-  return <CampusPage page="registrants" />;
+  return <RegistrantsClient />;
 }

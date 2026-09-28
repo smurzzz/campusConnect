@@ -1,162 +1,117 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft, Loader2, Send } from "lucide-react";
 import { useUser } from "@clerk/nextjs";
-import { CampusPage } from "@/components/campus-page";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { CheckCircle2 } from "lucide-react";
-import { Loader2 } from "lucide-react";
-import { Send } from "lucide-react";
-import { AlertTriangle } from "lucide-react";
-import { StatusBadge } from "@/components/campus-page";
 import { toast } from "sonner";
 
+import { CampusPage, StatusBadge } from "@/components/campus-page";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { addConcernMessage, getConcern, listConcernMessages, toConcernStatusLabel, type ConcernDetail, type ThreadMessage } from "@/lib/concerns";
+import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
+
 export default function ConcernDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const { user } = useUser();
-  const [concern, setConcern] = useState<any>(null);
-  const [messages, setMessages] = useState<any[]>([]);
+  const params = useParams<{ id: string }>();
+  const id = params?.id;
+  const { user, isLoaded } = useUser();
+  const client = useSupabaseClient();
+
+  const [concern, setConcern] = useState<ConcernDetail | null>(null);
+  const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [replyLoading, setReplyLoading] = useState(false);
-  // Controlled rather than ref-based: reading `ref.current` during render to
-  // decide whether the send button is enabled meant the button never re-rendered
-  // as the user typed, so it stayed disabled.
   const [reply, setReply] = useState("");
+  const [replyLoading, setReplyLoading] = useState(false);
 
-  useEffect(() => {
-    if (!id || !user) {
-      setError("Missing concern ID or user not authenticated");
+  const fetchThread = useCallback(async () => {
+    if (!id) {
+      setError("Concern ID is missing");
       setLoading(false);
       return;
     }
-    fetchConcern(user.id);
-    fetchMessages();
-  }, [id, user]);
 
-  const fetchConcern = async (studentId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('concerns')
-        .select(`
-          id,
-          subject,
-          category,
-          description,
-          status,
-          created_at,
-          student_id,
-          assigned_to,
-          attachment_url,
-          student:users!concerns_student_id_fkey (full_name, email),
-          assignee:users!concerns_assigned_to_fkey (full_name)
-        `)
-        .eq('id', id)
-        .eq('student_id', studentId) // Ensure the concern belongs to the current student
-        .single();
+    const [concernResult, messageResult] = await Promise.all([
+      getConcern(client, id),
+      listConcernMessages(client, id),
+    ]);
 
-      if (error) throw error;
-      if (!data) {
-        setError("Concern not found or access denied");
-        setLoading(false);
-        return;
-      }
-      setConcern(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load concern');
-    } finally {
-      setLoading(false);
+    if (concernResult.error) {
+      setError(concernResult.error);
+    } else if (!concernResult.row) {
+      setError("Concern not found or you don't have access to it.");
+    } else {
+      setConcern(concernResult.row);
+      setError(null);
     }
-  };
+    setMessages(messageResult.rows);
+    setLoading(false);
+  }, [client, id]);
 
-  const fetchMessages = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('concern_messages')
-        .select(`
-          id,
-          message,
-          created_at,
-          sender_id,
-          sender:users!concern_messages_sender_id_fkey (full_name)
-        `)
-        .eq('concern_id', id)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-      setMessages(data);
-    } catch (err) {
-      // Don't set error for messages as it's not critical
-      console.error("Failed to load messages:", err);
-    }
-  };
+  useEffect(() => {
+    if (!isLoaded) return;
+    void fetchThread();
+  }, [fetchThread, isLoaded]);
 
   const handleReplySubmit = async () => {
     const text = reply.trim();
-    if (!text || !concern || !user) return;
+    if (!text || !id || !user) return;
+
     setReplyLoading(true);
     try {
-      const { error } = await supabase
-        .from('concern_messages')
-        .insert({
-          concern_id: id,
-          sender_id: user.id,
-          message: text,
-        });
-
-      if (error) throw error;
+      const result = await addConcernMessage(client, id, user.id, text);
+      if (!result.ok) {
+        toast.error("Failed to send reply", { description: result.error });
+        return;
+      }
       setReply("");
-      // Refetch messages to include the new one
-      await fetchMessages();
       toast.success("Reply sent");
-    } catch (err) {
-      toast.error("Failed to send reply");
+      await fetchThread();
     } finally {
       setReplyLoading(false);
     }
   };
 
-  if (loading) return <CampusPage page="concern-detail" />;
-  if (error) return <CampusPage page="concern-detail" >{error}</CampusPage>;
-  if (!concern) return <CampusPage page="concern-detail" >Concern not found</CampusPage>;
+  if (loading) {
+    return (
+      <CampusPage page="concern-detail">
+        <div className="space-y-4" aria-busy="true">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-64 w-full rounded-xl" />
+        </div>
+      </CampusPage>
+    );
+  }
+
+  if (error || !concern) {
+    return (
+      <CampusPage page="concern-detail">
+        <p>{error ?? "Concern not found"}</p>
+      </CampusPage>
+    );
+  }
 
   return (
     <CampusPage page="concern-detail">
-      <div className="space-y-6">
-        {/* Concern details */}
-        <section className="border rounded-lg p-4">
-          <h2 className="mb-4 text-lg font-semibold">{concern.subject}</h2>
-          <div className="grid gap-4 mb-4">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Category</p>
-              <p className="text-base">{concern.category}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Status</p>
-              <StatusBadge status={concern.status as any} />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Submitted</p>
-              <p className="text-base">{new Date(concern.created_at).toLocaleDateString()}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Assigned to</p>
-              <p className="text-base">
-                {concern.assignee?.[0]?.full_name ?? 'Unassigned'}
-              </p>
-            </div>
-          </div>
-          <div className="mb-4">
-            <p className="text-sm font-medium text-muted-foreground mb-2">Description</p>
-            <p className="text-base text-muted-foreground">{concern.description}</p>
-          </div>
+      <Link
+        href="/concerns"
+        className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
+      >
+        <ArrowLeft /> Back to my concerns
+      </Link>
+
+      <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+        <section className="section-panel">
+          <span className="category-badge">{concern.category ?? "General"}</span>
+          <h2 className="mt-3 text-xl font-bold">{concern.subject}</h2>
+          <p className="mt-4 whitespace-pre-line leading-7 text-muted-foreground">{concern.description}</p>
+
           {concern.attachment_url && (
-            <div className="mb-4">
-              <p className="text-sm font-medium text-muted-foreground mb-2">Attachment</p>
+            <div className="mt-4">
+              <p className="mb-2 text-sm font-medium text-muted-foreground">Attachment</p>
               <a
                 href={concern.attachment_url}
                 target="_blank"
@@ -167,65 +122,80 @@ export default function ConcernDetailPage() {
               </a>
             </div>
           )}
-        </section>
 
-        {/* Conversation */}
-        <section className="border rounded-lg p-4">
-          <h2 className="mb-4 text-lg font-semibold">Conversation</h2>
-          {messages.length === 0 ? (
-            <p className="text-muted-foreground">No replies yet.</p>
-          ) : (
-            <div className="space-y-4">
-              {messages.map((msg) => (
-                <div key={msg.id} className="flex flex-col sm:flex-row sm:items-start sm:gap-4">
-                  <div className="flex-shrink-0 h-9 w-9 rounded-full bg-primary/20 flex items-center justify-center">
-                    {msg.sender?.[0]?.full_name?.charAt(0) ?? '?'}
-                  </div>
-                  <div className="flex-1 space-y-1.5">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">{msg.sender?.[0]?.full_name ?? 'Unknown'}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(msg.created_at).toLocaleString()}
-                      </span>
+          <div className="mt-6 border-t border-border pt-5">
+            <h3 className="section-title">Conversation</h3>
+            {messages.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No replies yet.</p>
+            ) : (
+              <div className="mt-4 space-y-5">
+                {messages.map((msg) => (
+                  <div className="thread-item" key={msg.id}>
+                    <span className="avatar">{(msg.sender_name ?? "?").charAt(0).toUpperCase()}</span>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <strong>{msg.sender_name ?? "Unknown"}</strong>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(msg.created_at).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 whitespace-pre-line text-sm leading-6 text-muted-foreground">
+                        {msg.message}
+                      </p>
                     </div>
-                    <p className="text-base text-muted-foreground">{msg.message}</p>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="mt-4 pt-3 border-t border-border">
-            <Label htmlFor="reply-input">Reply</Label>
-            <Textarea
-              id="reply-input"
-              placeholder="Write your reply..."
-              className="min-h-[100px]"
-              disabled={replyLoading}
-              value={reply}
-              onChange={(e) => setReply(e.target.value)}
-            />
-            <div className="mt-2 flex justify-end">
-              <Button
-                type="button"
-                disabled={replyLoading || !reply.trim()}
-                onClick={handleReplySubmit}
-                className="w-[120px]"
-              >
-                {replyLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Send className="mr-2"/>
-                    Send Reply
-                  </>
-                )}
-              </Button>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-6 border-t border-border pt-5">
+              <Textarea
+                placeholder="Add a follow-up comment…"
+                className="min-h-24"
+                disabled={replyLoading}
+                value={reply}
+                onChange={(event) => setReply(event.target.value)}
+              />
+              <div className="mt-3 flex justify-end">
+                <Button disabled={replyLoading || !reply.trim()} onClick={() => void handleReplySubmit()}>
+                  {replyLoading ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" /> Sending…
+                    </>
+                  ) : (
+                    <>
+                      <Send /> Add comment
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </section>
+
+        <aside className="section-panel h-fit">
+          <h3 className="section-title">Concern details</h3>
+          <dl className="detail-list">
+            <div>
+              <dt>Status</dt>
+              <dd>
+                <StatusBadge status={toConcernStatusLabel(concern.status)} />
+              </dd>
+            </div>
+            <div>
+              <dt>Category</dt>
+              <dd>{concern.category ?? "—"}</dd>
+            </div>
+            <div>
+              <dt>Submitted</dt>
+              <dd>{new Date(concern.created_at).toLocaleDateString()}</dd>
+            </div>
+            <div>
+              <dt>Assigned to</dt>
+              <dd>{concern.assignee_name ?? "Unassigned"}</dd>
+            </div>
+          </dl>
+        </aside>
       </div>
     </CampusPage>
   );

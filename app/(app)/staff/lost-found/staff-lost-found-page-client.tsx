@@ -1,68 +1,122 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { CampusPage } from "@/components/campus-page";
-import { ManagementTable } from "@/components/campus-page";
+import Link from "next/link";
+import { Search } from "lucide-react";
+
+import { CampusPage, EmptyState, StatusBadge } from "@/components/campus-page";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { listLostFoundItems } from "@/lib/lost-found";
+import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
+import { toItemStatusLabel } from "@/lib/lost-found-labels";
+
+function formatDate(value: string | null): string {
+  if (!value) return "—";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "—" : parsed.toLocaleDateString();
+}
 
 export default function StaffLostFoundPage() {
-  const [items, setItems] = useState<any[]>([]);
+  const client = useSupabaseClient();
+  const [items, setItems] = useState<Awaited<ReturnType<typeof listLostFoundItems>>["rows"]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
 
   useEffect(() => {
-    fetchLostFoundItems();
-  }, []);
-
-  const fetchLostFoundItems = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('lost_found_items')
-        .select(`
-          id,
-          type,
-          name,
-          description,
-          category,
-          location,
-          date,
-          photo_url,
-          status,
-          reported_by,
-          reported_by:users!lost_found_items_reported_by_fkey (full_name)
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      // Map the data to include the reporter's name
-      const mappedItems = data.map((item: any) => ({
-        id: item.id,
-        type: item.type,
-        name: item.name,
-        description: item.description,
-        category: item.category,
-        location: item.location,
-        date: item.date,
-        photoUrl: item.photo_url,
-        status: item.status,
-        reportedBy: item.reported_by?.[0]?.full_name ?? '',
-      }));
-
-      setItems(mappedItems);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
+    void (async () => {
+      const result = await listLostFoundItems(client, { withReporter: true });
+      if (result.error) setError(result.error);
+      setItems(result.rows);
       setLoading(false);
-    }
-  };
+    })();
+  }, [client]);
 
-  if (loading) return <CampusPage page="staff-lost" />;
-  if (error) return <CampusPage page="staff-lost" >Error loading lost & found items: {error}</CampusPage>;
+  const filtered = items.filter((item) => {
+    if (typeFilter && item.type !== typeFilter) return false;
+    const needle = search.trim().toLowerCase();
+    if (!needle) return true;
+    return (
+      item.name.toLowerCase().includes(needle) ||
+      (item.category ?? "").toLowerCase().includes(needle) ||
+      (item.location ?? "").toLowerCase().includes(needle) ||
+      (item.reporter_name ?? "").toLowerCase().includes(needle)
+    );
+  });
 
   return (
     <CampusPage page="staff-lost">
-      <ManagementTable kind="lost" data={items} />
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Search reported items"
+            aria-label="Search reported items"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+        <select
+          className="field-select"
+          aria-label="Filter by type"
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value)}
+        >
+          <option value="">All types</option>
+          <option value="lost">Lost</option>
+          <option value="found">Found</option>
+        </select>
+      </div>
+
+      {error && (
+        <div className="mb-5 rounded-md bg-danger-soft p-4 text-sm text-danger">{error}</div>
+      )}
+
+      {loading ? (
+        <div className="space-y-3" aria-busy="true" aria-label="Loading items">
+          {[0, 1, 2, 3].map((index) => (
+            <Skeleton key={index} className="h-16 w-full rounded-md" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
+        <EmptyState title="No items found" text="Try changing your search or filters." />
+      ) : (
+        <div className="table-shell">
+          <div className="data-grid-row hidden bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground md:grid md:grid-cols-[1.6fr_0.7fr_1fr_1fr_0.8fr_auto]">
+            <span>Item</span>
+            <span>Type</span>
+            <span>Location</span>
+            <span>Reported by</span>
+            <span>Status</span>
+            <span className="text-right">Actions</span>
+          </div>
+          {filtered.map((item) => (
+            <div key={item.id} className="data-grid-row md:grid-cols-[1.6fr_0.7fr_1fr_1fr_0.8fr_auto]">
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{item.name}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">{formatDate(item.date)}</p>
+              </div>
+              <div className="text-sm capitalize text-muted-foreground">{item.type}</div>
+              <div className="truncate text-sm text-muted-foreground">{item.location ?? "—"}</div>
+              <div className="truncate text-sm text-muted-foreground">{item.reporter_name ?? "—"}</div>
+              <div>
+                <StatusBadge status={toItemStatusLabel(item.status)} />
+              </div>
+              <div className="flex justify-end">
+                <Button variant="ghost" size="icon" asChild>
+                  <Link href={`/staff/lost-found/${item.id}`} aria-label={`Review ${item.name}`}>
+                    →
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </CampusPage>
   );
 }

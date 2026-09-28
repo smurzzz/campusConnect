@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUser } from "@clerk/nextjs";
+import { useRole } from "@/lib/clerk/use-role";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { cn } from "@/lib/utils";
 import { dashboardRouteForRole } from "@/lib/constants/routes";
 import { useNotifications } from "@/lib/hooks/use-notifications";
+import { useSupabaseClient as useSupabaseClientHook } from "@/lib/hooks/use-supabase-client";
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/lib/supabase";
 import { toPublicationLabel, statusTone, PUBLICATION_STATUSES, ITEM_STATUSES, ITEM_TYPES, type PublicationStatus, type ItemType } from "@/lib/constants/statuses";
@@ -108,7 +110,8 @@ export function EventCards({ items, register=false }: { items?: EventRow[]; regi
   if (!items || items.length === 0) return <EmptyState title="No events yet" text="New campus events will appear here once they are published."/>;
   return <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{items.map((e,i)=>{const startsAt=new Date(e.start_time);return <article key={e.id} className="event-card animate-rise" style={{animationDelay:`${i*70}ms`}}><div className={cn("relative flex h-40 items-end p-5",EVENT_COVER_TONES[i%3])}><span className="rounded-md bg-background/90 px-3 py-2 text-center text-xs font-bold text-foreground shadow-sm">{startsAt.toLocaleDateString(undefined,{month:"short"})}<strong className="block text-xl text-primary">{startsAt.getDate()}</strong></span></div><div className="p-5"><span className="category-badge">{e.category}</span><h2 className="mt-3 text-lg font-semibold">{e.title}</h2><div className="mt-4 space-y-2 text-sm text-muted-foreground"><p className="flex items-center gap-2"><CalendarDays/>{startsAt.toLocaleString()}</p><p className="flex items-center gap-2"><MapPin/>{e.location}</p>{register&&e.capacity!=null&&<p className="flex items-center gap-2"><UsersRound/>{e.capacity} spots</p>}</div><Button className="mt-5 w-full" variant={register?"default":"outline"} asChild><Link href={`/events/${e.id}${register?"?view=student":""}`}>{register?"Register":"View details"}</Link></Button></div></article>})}</div>;
 }
-function PublicShell({ children }: { children: ReactNode }) {
+/** Guest shell, exported for public detail screens that render their own body. */
+export function PublicShell({ children }: { children: ReactNode }) {
   return <div className="min-h-screen bg-background"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-10 lg:px-8 lg:py-14">{children}</main></div>;
 }
 /**
@@ -120,10 +123,13 @@ export function PublicPage({ title, text, actions, children }: { title: string; 
 }
 function AppShell({ role, title, subtitle, actions, children }: { role: Role; title: string; subtitle?: string; actions?: ReactNode; children: ReactNode }) {
   const { unreadCount } = useNotifications();
+  const { user } = useUser();
   const path=usePathname();
   const [collapsed,setCollapsed]=useState(false);
+  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Welcome";
+  const initials = displayName === "Welcome" ? "?" : displayName.split(" ").map((part) => part.charAt(0)).slice(0, 2).join("");
   const nav=role==="admin"?adminNav:role==="staff"?staffNav:studentNav;
-  return <div className="min-h-screen bg-app"><aside className={cn("fixed inset-y-0 left-0 z-40 hidden border-r border-sidebar-border bg-sidebar transition-all duration-300 lg:flex lg:flex-col",collapsed?"w-20":"w-64")}><div className="flex h-20 items-center justify-between px-5"><Brand compact={collapsed}/><Button variant="ghost" size="icon" onClick={()=>setCollapsed(!collapsed)} aria-label="Collapse sidebar"><Menu/></Button></div><nav className="flex-1 space-y-1 px-3">{nav.map(([label,href,Icon])=><Link key={href} href={href} title={label} className={cn("sidebar-link", path===href&&"sidebar-link-active",collapsed&&"justify-center px-0")}><Icon/>{!collapsed&&<span>{label}</span>}</Link>)}</nav><div className="border-t border-sidebar-border p-3"><Link href="/" className={cn("sidebar-link",collapsed&&"justify-center px-0")}><LogOut/>{!collapsed&&"Exit demo"}</Link></div></aside><div className={cn("transition-all duration-300",collapsed?"lg:pl-20":"lg:pl-64")}><header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-border/80 bg-background/90 px-5 backdrop-blur-xl lg:px-8"><div className="lg:hidden"><Brand compact/></div><div className="relative hidden w-full max-w-sm lg:block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Search CampusConnect" /></div><div className="flex items-center gap-2"><Button variant="ghost" size="icon" className="relative" aria-label="Notifications" asChild><Link href="/notifications"><Bell/><span className="absolute right-2 top-2 size-2 rounded-full bg-danger ring-2 ring-background"/></Link></Button><div className="ml-1 flex items-center gap-2 border-l border-border pl-3"><span className="grid size-9 place-items-center rounded-full bg-primary-soft font-semibold text-primary">MS</span><div className="hidden text-left sm:block"><p className="text-sm font-semibold">Maya Santos</p><p className="text-xs capitalize text-muted-foreground">{role}</p></div><ChevronDown className="size-4 text-muted-foreground"/></div></div></header><main className="mx-auto max-w-[1480px] px-5 py-7 pb-24 lg:px-8 lg:py-9"><div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="mb-1 text-sm font-semibold uppercase text-primary">{role==="admin"?"Administration":role==="staff"?"Personnel portal":"Student portal"}</p><h1 className="page-title">{title}</h1>{subtitle&&<p className="mt-2 text-muted-foreground">{subtitle}</p>}</div>{actions}</div>{children}</main><nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-border bg-background px-2 py-2 lg:hidden">{nav.slice(0,4).map(([label,href,Icon])=><Link key={href} href={href} className={cn("flex flex-col items-center gap-1 py-1 text-[11px] font-medium text-muted-foreground",path===href&&"text-primary")}><Icon className="size-5"/><span>{label}</span></Link>)}</nav></div></div>;
+  return <div className="min-h-screen bg-app"><aside className={cn("fixed inset-y-0 left-0 z-40 hidden border-r border-sidebar-border bg-sidebar transition-all duration-300 lg:flex lg:flex-col",collapsed?"w-20":"w-64")}><div className="flex h-20 items-center justify-between px-5"><Brand compact={collapsed}/><Button variant="ghost" size="icon" onClick={()=>setCollapsed(!collapsed)} aria-label="Collapse sidebar"><Menu/></Button></div><nav className="flex-1 space-y-1 px-3">{nav.map(([label,href,Icon])=><Link key={href} href={href} title={label} className={cn("sidebar-link", path===href&&"sidebar-link-active",collapsed&&"justify-center px-0")}><Icon/>{!collapsed&&<span>{label}</span>}</Link>)}</nav><div className="border-t border-sidebar-border p-3"><Link href="/" className={cn("sidebar-link",collapsed&&"justify-center px-0")}><LogOut/>{!collapsed&&"Exit demo"}</Link></div></aside><div className={cn("transition-all duration-300",collapsed?"lg:pl-20":"lg:pl-64")}><header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-border/80 bg-background/90 px-5 backdrop-blur-xl lg:px-8"><div className="lg:hidden"><Brand compact/></div><div className="relative hidden w-full max-w-sm lg:block"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder="Search CampusConnect" /></div><div className="flex items-center gap-2"><Button variant="ghost" size="icon" className="relative" aria-label={unreadCount>0?`Notifications, ${unreadCount} unread`:`Notifications`} asChild><Link href="/notifications"><Bell/>{unreadCount>0&&<span className="absolute right-2 top-2 grid size-4 place-items-center rounded-full bg-danger text-[10px] font-bold text-white ring-2 ring-background">{unreadCount>9?"9+":unreadCount}</span>}</Link></Button><div className="ml-1 flex items-center gap-2 border-l border-border pl-3"><span className="grid size-9 place-items-center rounded-full bg-primary-soft font-semibold text-primary">{initials}</span><div className="hidden text-left sm:block"><p className="text-sm font-semibold">{displayName}</p><p className="text-xs capitalize text-muted-foreground">{role==="staff"?"Personnel":role}</p></div></div></div></header><main className="mx-auto max-w-[1480px] px-5 py-7 pb-24 lg:px-8 lg:py-9"><div className="mb-7 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="mb-1 text-sm font-semibold uppercase text-primary">{role==="admin"?"Administration":role==="staff"?"Personnel portal":"Student portal"}</p><h1 className="page-title">{title}</h1>{subtitle&&<p className="mt-2 text-muted-foreground">{subtitle}</p>}</div>{actions}</div>{children}</main><nav className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-border bg-background px-2 py-2 lg:hidden">{nav.slice(0,4).map(([label,href,Icon])=><Link key={href} href={href} className={cn("flex flex-col items-center gap-1 py-1 text-[11px] font-medium text-muted-foreground",path===href&&"text-primary")}><Icon className="size-5"/><span>{label}</span></Link>)}</nav></div></div>;
 }
 function PageHeader({ title, text }: { title: string; text: string }) { return <div className="mb-8"><h1 className="page-title">{title}</h1><p className="mt-2 max-w-2xl text-muted-foreground">{text}</p></div>; }
 function Filters({ search="Search", extra=true, value, onValue }: { search?: string; extra?: boolean; value?: string; onValue?: (value:string)=>void }) { return <div className="mb-6 flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder={search} value={value} onChange={e=>onValue?.(e.target.value)}/></div>{extra&&<><select className="field-select"><option>All categories</option><option>Academic</option><option>Facilities</option><option>Community</option></select><Button variant="outline"><Filter/>Filters</Button></>}</div>; }
@@ -322,7 +328,7 @@ function AuthPage({ signup = false }: { signup?: boolean }) {
 }
 function ForgotPassword(){const[sent,setSent]=useState(false);return <div className="auth-bg flex min-h-screen flex-col"><div className="px-5 pt-5 sm:px-8"><Brand/></div><div className="flex flex-1 items-center justify-center px-5 py-12"><div className="auth-card animate-rise">{sent?<div className="text-center"><span className="mx-auto grid size-14 place-items-center rounded-full bg-success-soft text-success"><CheckCircle2 className="size-7"/></span><h1 className="mt-5 text-2xl font-bold">Check your email</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">If an account matches that address, we sent instructions to reset your password.</p><Button className="mt-7 w-full" asChild><Link href="/login"><ArrowLeft/>Back to login</Link></Button></div>:<><div className="text-center"><span className="mx-auto grid size-12 place-items-center rounded-xl bg-primary-soft text-primary"><KeyRound/></span><h1 className="mt-5 text-2xl font-bold">Reset your password</h1><p className="mt-2 text-sm text-muted-foreground">Enter your campus email and we’ll send reset instructions.</p></div><form className="mt-7 space-y-5" onSubmit={e=>{e.preventDefault();setSent(true)}}><AuthField label="Campus email" type="email" placeholder="you@campus.edu" icon={Mail}/><Button className="h-11 w-full" type="submit">Send reset link<ArrowRight/></Button></form><Link href="/login" className="mt-6 flex items-center justify-center gap-2 text-sm font-semibold text-primary"><ArrowLeft/>Back to login</Link></>}</div></div></div>}
 function Landing() {
-  const [announcementsData, setAnnouncementsData] = useState<any[]>([]);
+  const [announcementsData, setAnnouncementsData] = useState<Array<{ id: string; title: string; category: string | null; excerpt: string; date: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -332,14 +338,23 @@ function Landing() {
 
   const fetchAnnouncements = async () => {
     try {
+      // Published only: the landing page is public, and the RLS published-only
+      // policy is what actually enforces this.
       const { data, error } = await supabase
         .from('announcements')
-        .select('*')
+        .select('id, title, category, body, created_at')
+        .eq('status', 'published')
         .order('created_at', { ascending: false })
         .limit(3);
 
       if (error) throw error;
-      setAnnouncementsData(data);
+      setAnnouncementsData((data ?? []).map((a) => ({
+        id: a.id,
+        title: a.title,
+        category: a.category,
+        excerpt: excerptFrom(a.body),
+        date: formatAnnouncementDate(a.created_at),
+      })));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load announcements');
     } finally {
@@ -350,7 +365,7 @@ function Landing() {
   if (loading) return <div className="bg-background"><PublicNav/><main><div className="min-h-screen flex items-center justify-center">Loading...</div></main></div>;
   if (error) return <div className="bg-background"><PublicNav/><main><div className="min-h-screen flex items-center justify-center">Error: {error}</div></main></div>;
 
-  return <div className="bg-background"><PublicNav/><main><section className="hero-section"><div className="hero-grid mx-auto max-w-7xl px-5 py-20 lg:px-8 lg:py-28"><div className="animate-rise"><span className="eyebrow"><Sparkles/>Your campus, connected</span><h1 className="mt-6 max-w-3xl text-5xl font-bold leading-[1.08] sm:text-6xl lg:text-7xl">All your campus updates, <span className="text-primary">in one place.</span></h1><p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">Stay informed, join events, raise concerns, and reconnect lost items with one trusted campus hub.</p><div className="mt-8 flex flex-wrap gap-3"><Button size="lg" asChild><Link href="/login">Log in</Link></Button><Button size="lg" variant="outline" asChild><Link href="/signup">Sign up</Link></Button></div><div className="mt-12 flex flex-wrap gap-6 text-sm text-muted-foreground"><span className="flex items-center gap-2"><CheckCircle2 className="text-success"/>Verified campus updates</span><span className="flex items-center gap-2"><CheckCircle2 className="text-success"/>Fast service requests</span></div></div><div className="hero-preview animate-float"><div className="mb-5 flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Good morning, Maya</p><h2 className="text-xl font-bold">Campus overview</h2></div><span className="grid size-10 place-items-center rounded-full bg-primary-soft font-semibold text-primary">MS</span></div><div className="space-y-3">{announcementsData.slice(0,3).map((a,i)=><div className="flex gap-3 rounded-md border border-border bg-background p-4" key={a.id}><span className={cn("grid size-10 shrink-0 place-items-center rounded-md",i===0?"bg-primary-soft text-primary":i===1?"bg-success-soft text-success":"bg-warning-soft text-warning")}><Megaphone/></span><div><p className="text-sm font-semibold">{a.title}</p><p className="mt-1 text-xs text-muted-foreground">{a.date}</p></div></div>)}</div></div></div></section><section className="mx-auto max-w-7xl px-5 py-20 lg:px-8"><div className="mb-10 max-w-2xl"><p className="eyebrow">Everything you need</p><h2 className="mt-4 text-3xl font-bold sm:text-4xl">Campus life, simplified.</h2></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[[Megaphone,"Announcements","Never miss an important campus update."],[CalendarDays,"Events","Discover and register for campus activities."],[MessageSquareText,"Concerns","Reach the right team and track progress."],[PackageSearch,"Lost & Found","Report and recover misplaced items."]].map(([Icon,t,d]:any)=><div className="feature-card" key={t}><span className="feature-icon"><Icon/></span><h3 className="mt-5 font-bold">{t}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{d}</p></div>)}</div></section><section className="border-y border-border bg-muted/45"><div className="mx-auto max-w-7xl px-5 py-20 lg:px-8"><div className="mb-8 flex items-end justify-between"><div><p className="eyebrow">From the campus</p><h2 className="mt-3 text-3xl font-bold">Latest announcements</h2></div><Link href="/announcements" className="hidden font-semibold text-primary sm:block">View all →</Link></div><div className="grid gap-4 md:grid-cols-3">{announcementsData.slice(0,3).map(a=><article className="content-card" key={a.id}><span className="category-badge">{a.category}</span><h3 className="mt-4 font-bold">{a.title}</h3><p className="mt-3 text-sm leading-6 text-muted-foreground">{a.excerpt}</p></article>)}</div></div></section></main><footer className="border-t border-border"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 px-5 py-10 sm:flex-row lg:px-8"><div><Brand/><p className="mt-3 text-sm text-muted-foreground">Northbridge University · Student Services</p></div><div className="text-sm text-muted-foreground"><p className="font-semibold text-foreground">Need help?</p><p className="mt-2">studentservices@northbridge.edu</p><p>+65 6123 4567</p></div></div></footer></div>;
+  return <div className="bg-background"><PublicNav/><main><section className="hero-section"><div className="hero-grid mx-auto max-w-7xl px-5 py-20 lg:px-8 lg:py-28"><div className="animate-rise"><span className="eyebrow"><Sparkles/>Your campus, connected</span><h1 className="mt-6 max-w-3xl text-5xl font-bold leading-[1.08] sm:text-6xl lg:text-7xl">All your campus updates, <span className="text-primary">in one place.</span></h1><p className="mt-6 max-w-xl text-lg leading-8 text-muted-foreground">Stay informed, join events, raise concerns, and reconnect lost items with one trusted campus hub.</p><div className="mt-8 flex flex-wrap gap-3"><Button size="lg" asChild><Link href="/login">Log in</Link></Button><Button size="lg" variant="outline" asChild><Link href="/signup">Sign up</Link></Button></div><div className="mt-12 flex flex-wrap gap-6 text-sm text-muted-foreground"><span className="flex items-center gap-2"><CheckCircle2 className="text-success"/>Verified campus updates</span><span className="flex items-center gap-2"><CheckCircle2 className="text-success"/>Fast service requests</span></div></div><div className="hero-preview animate-float"><div className="mb-5 flex items-center justify-between"><div><p className="text-sm text-muted-foreground">Campus overview</p><h2 className="text-xl font-bold">Latest updates</h2></div><span className="grid size-10 place-items-center rounded-full bg-primary-soft font-semibold text-primary"><Megaphone/></span></div><div className="space-y-3">{announcementsData.length===0?<p className="rounded-md border border-border bg-background p-4 text-sm text-muted-foreground">Announcements will appear here once published.</p>:announcementsData.slice(0,3).map((a,i)=><div className="flex gap-3 rounded-md border border-border bg-background p-4" key={a.id}><span className={cn("grid size-10 shrink-0 place-items-center rounded-md",i===0?"bg-primary-soft text-primary":i===1?"bg-success-soft text-success":"bg-warning-soft text-warning")}><Megaphone/></span><div><p className="text-sm font-semibold">{a.title}</p><p className="mt-1 text-xs text-muted-foreground">{a.date}</p></div></div>)}</div></div></div></section><section className="mx-auto max-w-7xl px-5 py-20 lg:px-8"><div className="mb-10 max-w-2xl"><p className="eyebrow">Everything you need</p><h2 className="mt-4 text-3xl font-bold sm:text-4xl">Campus life, simplified.</h2></div><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[[Megaphone,"Announcements","Never miss an important campus update."],[CalendarDays,"Events","Discover and register for campus activities."],[MessageSquareText,"Concerns","Reach the right team and track progress."],[PackageSearch,"Lost & Found","Report and recover misplaced items."]].map(([Icon,t,d]:any)=><div className="feature-card" key={t}><span className="feature-icon"><Icon/></span><h3 className="mt-5 font-bold">{t}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{d}</p></div>)}</div></section><section className="border-y border-border bg-muted/45"><div className="mx-auto max-w-7xl px-5 py-20 lg:px-8"><div className="mb-8 flex items-end justify-between"><div><p className="eyebrow">From the campus</p><h2 className="mt-3 text-3xl font-bold">Latest announcements</h2></div><Link href="/announcements" className="hidden font-semibold text-primary sm:block">View all →</Link></div><div className="grid gap-4 md:grid-cols-3">{announcementsData.length===0?<p className="text-sm text-muted-foreground">No announcements published yet.</p>:announcementsData.slice(0,3).map(a=><article className="content-card" key={a.id}><span className="category-badge">{a.category}</span><h3 className="mt-4 font-bold">{a.title}</h3><p className="mt-3 text-sm leading-6 text-muted-foreground">{a.excerpt}</p></article>)}</div></div></section></main><footer className="border-t border-border"><div className="mx-auto flex max-w-7xl flex-col justify-between gap-6 px-5 py-10 sm:flex-row lg:px-8"><div><Brand/><p className="mt-3 text-sm text-muted-foreground">Northbridge University · Student Services</p></div><div className="text-sm text-muted-foreground"><p className="font-semibold text-foreground">Need help?</p><p className="mt-2">studentservices@northbridge.edu</p><p>+65 6123 4567</p></div></div></footer></div>;
 }
 function PublicList({eventsPage=false}:{eventsPage?:boolean}) {
   const [data, setData] = useState<any[]>([]);
@@ -394,48 +409,71 @@ function PublicList({eventsPage=false}:{eventsPage?:boolean}) {
 
   return <div className="min-h-screen"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-12 lg:px-8"><PageHeader title={eventsPage?"Campus events":"Announcements"} text={eventsPage?"Discover workshops, activities, and moments to connect.":"News and important information from across the university."}/><Filters search={eventsPage?"Search events":"Search announcements"}/>{eventsPage?<EventCards items={data}/> : <AnnouncementCards items={data}/>}<div className="mt-8 flex justify-center gap-2"><Button variant="outline" size="icon">1</Button><Button variant="ghost" size="icon">2</Button><Button variant="ghost" size="icon">3</Button></div></main></div>;
 }
+/**
+ * Student dashboard on real data: the three stat tiles are live counts, the
+ * announcement and event sections read Supabase through the session-bound
+ * client, and "My open concerns" lists the signed-in student's rows.
+ */
 function StudentDashboard() {
-  const [announcementsData, setAnnouncementsData] = useState<any[]>([]);
-  const [eventsData, setEventsData] = useState<any[]>([]);
+  const { user, isLoaded } = useUser();
+  const client = useSupabaseClientHook();
+  const [announcementsData, setAnnouncementsData] = useState<AnnouncementRow[]>([]);
+  const [eventsData, setEventsData] = useState<EventRow[]>([]);
+  const [myConcerns, setMyConcerns] = useState<Array<{ id: string; subject: string; category: string | null; status: string; submittedAt: string; studentName: string | null; assignee: string | null }>>([]);
+  const [openConcernCount, setOpenConcernCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!isLoaded) return;
+    void (async () => {
+      try {
+        const [announcementsResult, eventsResult] = await Promise.all([
+          client.from("announcements").select("id, title, category, body, created_at").eq("status", "published").order("created_at", { ascending: false }).limit(3),
+          client.from("events").select("id, title, location, start_time").gte("start_time", new Date().toISOString()).order("start_time", { ascending: true }).limit(3),
+        ]);
 
-  const fetchData = async () => {
-    try {
-      // Fetch announcements
-      const { data: announcementData, error: announcementError } = await supabase
-        .from('announcements')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(3);
+        if (announcementsResult.error) throw announcementsResult.error;
+        if (eventsResult.error) throw eventsResult.error;
 
-      if (announcementError) throw announcementError;
-      setAnnouncementsData(announcementData);
+        setAnnouncementsData((announcementsResult.data ?? []) as unknown as AnnouncementRow[]);
+        setEventsData((eventsResult.data ?? []) as unknown as EventRow[]);
 
-      // Fetch events
-      const { data: eventData, error: eventError } = await supabase
-        .from('events')
-        .select('*')
-        .order('start_time', { ascending: true })
-        .limit(3);
+        if (user) {
+          const concernsResult = await client
+            .from("concerns")
+            .select("id, subject, category, status, created_at, student_id, assigned_to, student:users!concerns_student_id_fkey (full_name), assignee:users!concerns_assigned_to_fkey (full_name)")
+            .eq("student_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(5);
+          if (!concernsResult.error) {
+            const rows = (concernsResult.data ?? []) as unknown as Array<{ id: string; subject: string; category: string | null; status: string; created_at: string; student_id: string; assigned_to: string | null; student?: { full_name: string | null }[] | null; assignee?: { full_name: string | null }[] | null }>;
+            setMyConcerns(rows.map((row) => ({
+              id: row.id,
+              subject: row.subject,
+              category: row.category,
+              status: row.status,
+              submittedAt: new Date(row.created_at).toLocaleDateString(),
+              studentName: row.student?.[0]?.full_name ?? null,
+              assignee: row.assignee?.[0]?.full_name ?? null,
+            })));
+            setOpenConcernCount(rows.filter((row) => row.status === "pending" || row.status === "in_progress").length);
+          }
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load dashboard data");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [client, isLoaded, user]);
 
-      if (eventError) throw eventError;
-      setEventsData(eventData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Welcome";
 
-  if (loading) return <AppShell role="student" title="Good afternoon, Maya" subtitle="Here’s what’s happening around campus today."><div className="min-h-screen flex items-center justify-center">Loading...</div></AppShell>;
-  if (error) return <AppShell role="student" title="Good afternoon, Maya" subtitle="Here’s what’s happening around campus today."><div className="min-h-screen flex items-center justify-center">Error: {error}</div></AppShell>;
+  if (loading) return <AppShell role="student" title={`Good day, ${displayName.split(" ")[0]}`} subtitle="Here's what's happening around campus today."><div className="section-panel p-0 py-8 text-center text-muted-foreground">Loading…</div></AppShell>;
+  if (error) return <AppShell role="student" title={`Good day, ${displayName.split(" ")[0]}`} subtitle="Here's what's happening around campus today."><div className="rounded-md bg-danger-soft p-4 text-sm text-danger">{error}</div></AppShell>;
 
-  return <AppShell role="student" title="Good afternoon, Maya" subtitle="Here’s what’s happening around campus today."><div className="mb-6 grid gap-4 sm:grid-cols-3"><StatCard label="Unread announcements" value="4" icon={Megaphone}/><StatCard label="Upcoming events" value="3" icon={CalendarCheck}/><StatCard label="Open concerns" value="2" icon={MessageSquareText}/></div><div className="grid gap-6 xl:grid-cols-2"><Section title="Recent announcements" action={<Link href="/announcements" className="section-link">View all</Link>}><div className="divide-y divide-border">{announcementsData.slice(0,3).map(a=><div className="py-3 first:pt-0" key={a.id}><span className="category-badge">{a.category}</span><p className="mt-2 font-semibold">{a.title}</p><p className="mt-1 text-xs text-muted-foreground">{a.date}</p></div>)}</div></Section><Section title="Upcoming events" action={<Link href="/events" className="section-link">View all</Link>}><div className="space-y-3">{eventsData.slice(0,3).map(e=><div className="flex items-center gap-3" key={e.id}><span className="grid size-12 shrink-0 place-items-center rounded-md bg-primary-soft text-xs font-bold text-primary">{e.day}</span><div><p className="font-semibold">{e.title}</p><p className="text-xs text-muted-foreground">{e.location}</p></div></div>)}</div></Section><div className="xl:col-span-2"><Section title="My open concerns" action={<Link href="/concerns" className="section-link">View all</Link>}><ConcernsTable/></Section></div></div></AppShell>;
+  return <AppShell role="student" title={`Good day, ${displayName.split(" ")[0]}`} subtitle="Here's what's happening around campus today."><div className="mb-6 grid gap-4 sm:grid-cols-3"><StatCard label="Unread announcements" value={announcementsData.length} icon={Megaphone}/><StatCard label="Upcoming events" value={eventsData.length} icon={CalendarCheck}/><StatCard label="Open concerns" value={openConcernCount} icon={MessageSquareText}/></div><div className="grid gap-6 xl:grid-cols-2"><Section title="Recent announcements" action={<Link href="/announcements" className="section-link">View all</Link>}><div className="divide-y divide-border">{announcementsData.length===0?<p className="py-3 text-sm text-muted-foreground">No announcements yet.</p>:announcementsData.map(a=><div className="py-3 first:pt-0" key={a.id}><span className="category-badge">{a.category}</span><p className="mt-2 font-semibold">{a.title}</p><p className="mt-1 text-xs text-muted-foreground">{new Date(a.created_at).toLocaleDateString()}</p></div>)}</div></Section><Section title="Upcoming events" action={<Link href="/events" className="section-link">View all</Link>}><div className="space-y-3">{eventsData.length===0?<p className="text-sm text-muted-foreground">No upcoming events yet.</p>:eventsData.map(e=><div className="flex items-center gap-3" key={e.id}><span className="grid size-12 shrink-0 place-items-center rounded-md bg-primary-soft text-xs font-bold text-primary">{new Date(e.start_time).toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span><div><p className="font-semibold">{e.title}</p><p className="text-xs text-muted-foreground">{e.location}</p></div></div>)}</div></Section><div className="xl:col-span-2"><Section title="My open concerns" action={<Link href="/concerns" className="section-link">View all</Link>}><ConcernsTable items={myConcerns}/></Section></div></div></AppShell>;
 }
 function useGuest(){const[signedIn,setSignedIn]=useState(false);useEffect(()=>{setSignedIn(window.location.search.includes("view=student")||window.sessionStorage.getItem("cc-session")==="1")},[]);return !signedIn}
 function Frame({title,subtitle,actions,children}:{title:string;subtitle?:string;actions?:ReactNode;children:ReactNode}){const guest=useGuest();if(!guest)return <AppShell role="student" title={title} {...(subtitle?{subtitle}:{})} actions={actions}>{children}</AppShell>;return <PublicShell><div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end animate-rise"><div><h1 className="page-title">{title}</h1>{subtitle&&<p className="mt-2 text-muted-foreground">{subtitle}</p>}</div><Button variant="outline" asChild><Link href="/login">Log in for full access<ArrowRight/></Link></Button></div>{children}</PublicShell>}
@@ -515,7 +553,35 @@ export function LostFound({ items }: { items?: LostFoundRow[] }) {
   );
 }
 function LostDetail(){const guest=useGuest();return <Frame title="Blue insulated bottle" subtitle="Lost item · Reported Sep 24"><div className="grid gap-6 xl:grid-cols-[1fr_420px]"><div className="grid min-h-96 place-items-center rounded-md bg-muted text-9xl">🥤</div><Section title="Item details"><StatusBadge status="Open"/><p className="mt-5 leading-7 text-muted-foreground">A navy blue insulated bottle with several small travel stickers. Last seen after the afternoon laboratory session.</p><dl className="detail-list mt-6"><div><dt>Location</dt><dd>Science Building, Room 205</dd></div><div><dt>Date reported</dt><dd>Sep 24, 2026</dd></div><div><dt>Category</dt><dd>Personal item</dd></div></dl><Button className="mt-6 w-full" size="lg" onClick={()=>guest?loginPrompt():toast.success("Message request sent")}><Mail/>Message reporter</Button></Section></div></Frame>}
-function Profile(){return <AppShell role="student" title="My profile" subtitle="Keep your contact information up to date."><div className="max-w-3xl"><Section title="Profile information"><div className="mb-7 flex items-center gap-4"><span className="relative grid size-20 place-items-center rounded-full bg-primary-soft text-xl font-bold text-primary">MS<button className="absolute -bottom-1 -right-1 grid size-8 place-items-center rounded-full bg-primary text-primary-foreground"><Camera className="size-4"/></button></span><div><p className="font-bold">Maya Santos</p><StatusBadge status="Student"/></div></div><form className="grid gap-5 sm:grid-cols-2" onSubmit={e=>{e.preventDefault();toast.success("Profile saved")}}><FormField label="Full name"><Input defaultValue="Maya Santos"/></FormField><FormField label="Email" note="Managed by your school account"><Input defaultValue="maya.santos@campus.edu" readOnly/></FormField><FormField label="Contact number"><Input defaultValue="+65 9123 4567"/></FormField><FormField label="Account role"><Input defaultValue="Student" readOnly/></FormField><div className="sm:col-span-2"><Button type="submit">Save changes</Button></div></form></Section></div></AppShell>}
+/**
+ * Profile screen on the real session: identity comes from Clerk (name, email,
+ * avatar), role from publicMetadata. Contact-number edits update the Clerk
+ * profile through `user.update()`; the email is school-managed and read-only.
+ */
+function Profile(){
+  const { user, isLoaded } = useUser();
+  const role = useRole();
+  const [phone, setPhone] = useState("");
+  const [saving, setSaving] = useState(false);    useEffect(()=>{ if (user) setPhone((user.unsafeMetadata?.contactNumber as string | undefined) ?? "") },[user]);
+  if (!isLoaded) return <AppShell role="student" title="My profile" subtitle="Keep your contact information up to date."><div className="section-panel p-0 py-8 text-center text-muted-foreground">Loading…</div></AppShell>;
+  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Member";
+  const initials = displayName.split(" ").map(p=>p.charAt(0)).slice(0,2).join("");
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setSaving(true);
+    try {
+      // `unsafeMetadata` is client-writable; `publicMetadata` can only be
+      // changed server-side (the admin role route does that).
+      await user.update({ unsafeMetadata: { ...user.unsafeMetadata, contactNumber: phone } });
+      toast.success("Profile saved");
+    } catch {
+      toast.error("Couldn't save your profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return <AppShell role="student" title="My profile" subtitle="Keep your contact information up to date."><div className="max-w-3xl"><Section title="Profile information"><div className="mb-7 flex items-center gap-4">{user?.imageUrl?<img src={user.imageUrl} alt="" className="size-20 rounded-full object-cover"/>:<span className="grid size-20 place-items-center rounded-full bg-primary-soft text-xl font-bold text-primary">{initials}</span>}<div><p className="font-bold">{displayName}</p><StatusBadge status={role==="admin"?"Active":"Student"}/></div></div><form className="grid gap-5 sm:grid-cols-2" onSubmit={save}><FormField label="Full name"><Input defaultValue={displayName} readOnly/></FormField><FormField label="Email" note="Managed by your school account"><Input defaultValue={user?.primaryEmailAddress?.emailAddress ?? ""} readOnly/></FormField><FormField label="Contact number"><Input value={phone} onChange={(e)=>setPhone(e.target.value)} placeholder="Your contact number"/></FormField><FormField label="Account role"><Input defaultValue={role} readOnly/></FormField><div className="sm:col-span-2"><Button type="submit" disabled={saving}>{saving?"Saving…":"Save changes"}</Button></div></form></Section></div></AppShell>}
 function Notifications(){const { notifications, loading, error, markAsRead, markAllAsRead, unreadCount } = useNotifications();
   if (loading) return <AppShell role="student" title="Notifications" subtitle="Updates that need your attention." actions={<Button variant="outline" onClick={markAllAsRead} disabled={unreadCount === 0}><Check/>Mark all as read</Button>}><div className="section-panel p-0 text-center py-8">Loading notifications...</div></AppShell>;
   if (error) return <AppShell role="student" title="Notifications" subtitle="Updates that need your attention." actions={<Button variant="outline" onClick={markAllAsRead} disabled={unreadCount === 0}><Check/>Mark all as read</Button>}><div className="section-panel p-0">Error loading notifications: {error}</div></AppShell>;
@@ -573,7 +639,33 @@ function Notifications(){const { notifications, loading, error, markAsRead, mark
     </AppShell>
   );
 }
-function StaffDashboard(){return <AppShell role="staff" title="Personnel dashboard" subtitle="Manage incoming requests and assigned work."><div className="mb-6 grid gap-4 sm:grid-cols-3"><StatCard label="Open concerns" value="24" icon={AlertCircle}/><StatCard label="In progress" value="11" icon={Clock3}/><StatCard label="Resolved this week" value="36" icon={CheckCircle2} trend="12% vs last week"/></div><Section title="Needs attention"><ConcernsTable staff/></Section></AppShell>}
+/** Personnel dashboard on live counts; the attention list is real pending concerns. */
+function StaffDashboard(){
+  const client = useSupabaseClientHook();
+  const [stats, setStats] = useState({open:0, inProgress:0, resolved:0});
+  const [concerns, setConcerns] = useState<Array<{id:string;subject:string;category:string|null;status:string;submittedAt:string;studentName:string|null;assignee:string|null}>>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string|null>(null);
+  useEffect(()=>{void (async()=>{
+    try {
+      const [concernRows, pendingCount, progressCount, resolvedCount] = await Promise.all([
+        client.from("concerns").select("id, subject, category, status, created_at, student_id, assigned_to, student:users!concerns_student_id_fkey (full_name), assignee:users!concerns_assigned_to_fkey (full_name)").order("created_at",{ascending:false}).limit(8),
+        client.from("concerns").select("id",{count:"exact",head:true}).eq("status","pending"),
+        client.from("concerns").select("id",{count:"exact",head:true}).eq("status","in_progress"),
+        client.from("concerns").select("id",{count:"exact",head:true}).eq("status","resolved"),
+      ]);
+      if (concernRows.error) throw concernRows.error;
+      if (pendingCount.error) throw pendingCount.error;
+      if (progressCount.error) throw progressCount.error;
+      if (resolvedCount.error) throw resolvedCount.error;
+      const rows = (concernRows.data ?? []) as unknown as Array<{id:string;subject:string;category:string|null;status:string;created_at:string;student?:{full_name:string|null}[]|null;assignee?:{full_name:string|null}[]|null}>;
+      setConcerns(rows.map(r=>({id:r.id,subject:r.subject,category:r.category,status:r.status.replace("_"," ").replace(/\b\w/g,c=>c.toUpperCase()),submittedAt:new Date(r.created_at).toLocaleDateString(),studentName:r.student?.[0]?.full_name??null,assignee:r.assignee?.[0]?.full_name??null})));
+      setStats({open:pendingCount.count??0, inProgress:progressCount.count??0, resolved:resolvedCount.count??0});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load dashboard");
+    } finally { setLoading(false); }
+  })()},[client]);
+  return <AppShell role="staff" title="Personnel dashboard" subtitle="Manage incoming requests and assigned work.">{loading?<div className="section-panel p-0 py-8 text-center text-muted-foreground">Loading…</div>:error?<div className="rounded-md bg-danger-soft p-4 text-sm text-danger">{error}</div>:<><div className="mb-6 grid gap-4 sm:grid-cols-3"><StatCard label="Open concerns" value={stats.open} icon={AlertCircle}/><StatCard label="In progress" value={stats.inProgress} icon={Clock3}/><StatCard label="Resolved" value={stats.resolved} icon={CheckCircle2}/></div><Section title="Needs attention"><ConcernsTable staff items={concerns}/></Section></>}</AppShell>}
 function StaffLost(){return <AppShell role="staff" title="Lost & Found management" subtitle="Review reports and update item status."><Filters search="Search reported items"/><ManagementTable kind="lost"/></AppShell>}
 function AdminList({kind}:{kind:"announcements"|"events"|"concerns"|"lost"|"users"}) {const labels={announcements:"Announcements",events:"Events",concerns:"Concerns",lost:"Lost & Found",users:"Users"};const title=labels[kind];return <AppShell role="admin" title={`Manage ${title}`} subtitle={`Review and manage ${title.toLowerCase()} across campus.`} actions={kind==="announcements"||kind==="events"?<CreateDialog kind={kind}/>:undefined}><Filters search={`Search ${title.toLowerCase()}`}/>{kind==="concerns"?<ConcernsTable admin/>:<ManagementTable kind={kind}/>}</AppShell>}
 

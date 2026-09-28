@@ -1,265 +1,186 @@
 "use client";
 
+import { useState } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState, useRef } from "react";
+import { AlertTriangle, CheckCircle, Loader2, Send } from "lucide-react";
+import { useUser } from "@clerk/nextjs";
+import { toast } from "sonner";
 
 import { CampusPage } from "@/components/campus-page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { CheckCircle } from "lucide-react";
-import { Loader2 } from "lucide-react";
-import { Send } from "lucide-react";
-import { AlertTriangle } from "lucide-react";
-
-import { useUser } from "@clerk/nextjs";
-
 import { lostFoundSchema } from "@/lib/validators";
-import { supabase } from "@/lib/supabase";
-import { toast } from "sonner";
-import { CAMPUS_LOCATIONS } from "@/lib/constants/categories";
+import { CAMPUS_LOCATIONS, LOST_FOUND_CATEGORIES, type LostFoundCategory } from "@/lib/constants/categories";
+import { createLostFoundItem, uploadLostFoundPhoto } from "@/lib/lost-found";
+import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
 
 export default function NewLostFoundPage() {
-  const [loading, setLoading] = useState(false);
+  const client = useSupabaseClient();
+  const { user } = useUser();
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [submittedId, setSubmittedId] = useState<string | null>(null);
+  const [photoName, setPhotoName] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
     reset,
+    formState: { errors, isSubmitting },
   } = useForm({
     resolver: zodResolver(lostFoundSchema),
     defaultValues: {
       name: "",
-      type: "Lost",
-      category: "Personal item",
+      type: "Lost" as const,
+      category: "Personal item" as LostFoundCategory,
       location: CAMPUS_LOCATIONS[0],
       date: "",
       description: "",
-      // No default: `FileList` only exists in the browser, and an empty array
-      // would fail the schema's `value instanceof FileList` check. `.optional()`
-      // accepts `undefined`.
     },
   });
-  const { user: currentUser } = useUser();
 
   const onSubmit = async (data: z.infer<typeof lostFoundSchema>) => {
-    setLoading(true);
     setError(null);
+    if (!user) {
+      setError("You must be signed in to report an item.");
+      return;
+    }
 
     try {
-      // Handle file upload if provided (for lost/found items, we expect a photo)
-      let photoUrl = null;
+      let photoUrl: string | null = null;
       if (data.attachment && data.attachment[0]) {
-        const file = data.attachment[0];
-        const filename = `${Date.now()}-${file.name.replace(/\s+/g, '-')}`;
-        const { data: uploadData, error: uploadError } = await supabase
-          .storage
-          .from('lost-found-attachments')
-          .upload(filename, file);
-
-        if (uploadError) throw uploadError;
-
-        // Get public URL
-        const { data: urlData } = supabase
-          .storage
-          .from('lost-found-attachments')
-          .getPublicUrl(uploadData.path);
-
-        photoUrl = urlData.publicUrl;
+        const upload = await uploadLostFoundPhoto(client, user.id, data.attachment[0]);
+        if (upload.error) throw new Error(upload.error);
+        photoUrl = upload.url;
       }
 
-      if (!currentUser) {
-        throw new Error("User not authenticated");
-      }
+      const result = await createLostFoundItem(client, {
+        reportedBy: user.id,
+        type: data.type.toLowerCase() as "lost" | "found",
+        name: data.name,
+        description: data.description,
+        category: data.category,
+        location: data.location,
+        date: data.date,
+        photoUrl,
+      });
 
-      // Insert lost/found item into database
-      const { data: itemData, error: itemError } = await supabase
-        .from('lost_found_items')
-        .insert({
-          type: data.type,
-          name: data.name,
-          description: data.description,
-          category: data.category,
-          location: data.location,
-          date: data.date,
-          photo_url: photoUrl,
-          reported_by: currentUser.id,
-          status: 'reported',
-        })
-        .select()
-        .single();
+      if (!result.ok || !result.id) throw new Error(result.error ?? "Failed to submit item");
 
-      if (itemError) throw itemError;
-
-      setSuccess(true);
+      setSubmittedId(result.id);
+      setPhotoName(null);
       reset();
-      // Clear file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-
-      // Show success toast
       toast.success("Item reported successfully!");
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit item');
-      toast.error("Failed to submit item");
-    } finally {
-      setLoading(false);
+      const message = err instanceof Error ? err.message : "Failed to submit item";
+      setError(message);
+      toast.error(message);
     }
   };
 
   return (
     <CampusPage page="lost-new">
-      {success && (
-        <div className="mb-6 p-4 bg-green-soft rounded-lg border border-green/20">
+      {submittedId && (
+        <div className="mb-6 rounded-lg border border-success/20 bg-success-soft p-4">
           <div className="flex items-start gap-3">
-            <CheckCircle className="mt-0.5 shrink-0 h-4 w-4 text-green"/>
+            <CheckCircle className="mt-0.5 size-4 shrink-0 text-success" />
             <div>
               <h3 className="font-semibold">Item reported!</h3>
               <p className="text-sm text-muted-foreground">
-                The item has been reported and will be visible to others who can help return it.
+                The item has been reported and will be visible to others who can help return it.{" "}
+                <Link href={`/lost-found/${submittedId}`} className="font-semibold text-primary hover:underline">
+                  View the report
+                </Link>
               </p>
             </div>
           </div>
         </div>
       )}
 
-      <form
-        className="space-y-6"
-        onSubmit={handleSubmit(onSubmit)}
-      >
+      <form className="space-y-6" onSubmit={handleSubmit(onSubmit)}>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="name">Item name</Label>
-            <Input
-              id="name"
-              placeholder="e.g. Black umbrella"
-              {...register("name")}
-            />
-            {errors.name && (
-              <p className="text-sm text-destructive">{errors.name.message}</p>
-            )}
+            <Input id="name" placeholder="e.g. Black umbrella" {...register("name")} />
+            {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
           </div>
 
           <div>
             <Label htmlFor="type">Lost or Found</Label>
-            <select
-              id="type"
-              className="field-select w-full"
-              {...register("type")}
-            >
+            <select id="type" className="field-select w-full" {...register("type")}>
               <option value="Lost">Lost</option>
               <option value="Found">Found</option>
             </select>
-            {errors.type && (
-              <p className="text-sm text-destructive">{errors.type.message}</p>
-            )}
+            {errors.type && <p className="text-sm text-destructive">{errors.type.message}</p>}
           </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <Label htmlFor="category">Category</Label>
-            <select
-              id="category"
-              className="field-select w-full"
-              {...register("category")}
-            >
-              <option value="Personal item">Personal item</option>
-              <option value="Electronics">Electronics</option>
-              <option value="Documents">Documents</option>
-              <option value="Keys">Keys</option>
-              <option value="Clothing">Clothing</option>
-              <option value="Other">Other</option>
+            <select id="category" className="field-select w-full" {...register("category")}>
+              {LOST_FOUND_CATEGORIES.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
             </select>
-            {errors.category && (
-              <p className="text-sm text-destructive">{errors.category.message}</p>
-            )}
+            {errors.category && <p className="text-sm text-destructive">{errors.category.message}</p>}
           </div>
 
           <div>
             <Label htmlFor="location">Location</Label>
-            <select
-              id="location"
-              className="field-select w-full"
-              {...register("location")}
-            >
+            <select id="location" className="field-select w-full" {...register("location")}>
               {CAMPUS_LOCATIONS.map((location) => (
                 <option key={location} value={location}>
                   {location}
                 </option>
               ))}
             </select>
-            {errors.location && (
-              <p className="text-sm text-destructive">{errors.location.message}</p>
-            )}
-          </div>
-        </div>
-
-        <div className="grid gap-4">
-          <div>
-            <Label htmlFor="date">Date</Label>
-            <Input
-              id="date"
-              type="date"
-              {...register("date")}
-            />
-            {errors.date && (
-              <p className="text-sm text-destructive">{errors.date.message}</p>
-            )}
+            {errors.location && <p className="text-sm text-destructive">{errors.location.message}</p>}
           </div>
         </div>
 
         <div>
+          <Label htmlFor="date">Date</Label>
+          <Input id="date" type="date" {...register("date")} />
+          {errors.date && <p className="text-sm text-destructive">{errors.date.message}</p>}
+        </div>
+
+        <div>
           <Label htmlFor="description">Description</Label>
-          <Textarea
-            id="description"
-            placeholder="Add a short description..."
-            className="min-h-[120px]"
-            {...register("description")}
-          />
-          {errors.description && (
-            <p className="text-sm text-destructive">{errors.description.message}</p>
-          )}
+          <Textarea id="description" placeholder="Add a short description..." className="min-h-[120px]" {...register("description")} />
+          {errors.description && <p className="text-sm text-destructive">{errors.description.message}</p>}
         </div>
 
         <div className="border-t pt-4">
           <Label htmlFor="photo">Photo (optional)</Label>
-          <p className="text-xs text-muted-foreground mb-2">
-            PNG, JPG, WEBP or PDF up to 10 MB
-          </p>
+          <p className="mb-2 text-xs text-muted-foreground">PNG, JPG or WEBP up to 10 MB</p>
           <input
-            ref={fileInputRef}
             type="file"
             id="photo"
-            accept=".png,.jpg,.jpeg,.webp,.pdf"
-            className="block w-full text-sm text-muted-foreground border border-input bg-background hover:border-primary/20"
+            accept=".png,.jpg,.jpeg,.webp"
+            className="block w-full border border-input bg-background text-sm text-muted-foreground hover:border-primary/20"
+            {...register("attachment")}
+            onChange={(event) => setPhotoName(event.target.files?.[0]?.name ?? null)}
           />
-          {/* We don't register this input with react-hook-form because we're handling it separately.
-               If we want to include it in form validation, we would need to update the schema.
-               For now, we'll just handle the file upload manually. */}
+          {errors.attachment && <p className="text-sm text-destructive">{errors.attachment.message}</p>}
+          {photoName && <p className="mt-1 text-xs text-muted-foreground">Selected: {photoName}</p>}
         </div>
 
         <div className="flex justify-end pt-4">
-          <Button
-            type="submit"
-            disabled={isSubmitting || loading}
-            className="w-[200px]"
-          >
-            {isSubmitting || loading ? (
+          <Button type="submit" disabled={isSubmitting} className="w-[200px]">
+            {isSubmitting ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin"/>
+                <Loader2 className="mr-2 size-4 animate-spin" />
                 Submitting...
               </>
             ) : (
               <>
-                <Send className="mr-2"/>
+                <Send className="mr-2" />
                 Submit Report
               </>
             )}
@@ -268,9 +189,9 @@ export default function NewLostFoundPage() {
       </form>
 
       {error && (
-        <div className="mt-4 p-4 bg-red-soft rounded-lg border border-red/20">
+        <div className="mt-4 rounded-lg border border-danger/20 bg-danger-soft p-4">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="mt-0.5 shrink-0 h-4 w-4 text-red"/>
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-danger" />
             <div>
               <h3 className="font-semibold">Error</h3>
               <p className="text-sm">{error}</p>

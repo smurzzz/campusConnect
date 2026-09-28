@@ -1,125 +1,157 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Download } from "lucide-react";
+import { toast } from "sonner";
 
-import { CampusPage } from "@/components/campus-page";
-import { supabase } from "@/lib/supabase";
-import { BarChart3, PieChart, TrendingUp } from "lucide-react";
+import { AdminDashboard, CampusPage } from "@/components/campus-page";
+import { Button } from "@/components/ui/button";
+import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
 
 /** Bucket shape the report charts render. */
 type StatusCount = { status: string; count: number };
+type AttendanceRow = { title: string; capacity: number | null; registration_count: number };
 
-/** Groups rows by `status` and returns them largest-bucket first. */
+/** Groups rows by `status`, largest bucket first, nulls collapsed. */
 function countByStatus(rows: { status: string | null }[] | null): StatusCount[] {
   const counts = new Map<string, number>();
-
   for (const row of rows ?? []) {
     const bucket = row.status || "Unspecified";
     counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
   }
-
   return [...counts.entries()]
     .map(([status, count]) => ({ status, count }))
     .sort((a, b) => b.count - a.count);
 }
 
+/** Human-readable concern status for the chart legend. */
+function concernLabel(value: string): string {
+  switch (value) {
+    case "pending":
+      return "Pending";
+    case "in_progress":
+      return "In Progress";
+    case "resolved":
+      return "Resolved";
+    case "closed":
+      return "Closed";
+    case "reported":
+      return "Reported";
+    case "claimed":
+      return "Claimed";
+    default:
+      return value.charAt(0).toUpperCase() + value.slice(1);
+  }
+}
+
+function downloadCsv(filename: string, rows: string[][]) {
+  const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  const csv = rows.map((row) => row.map(escape).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 export default function AdminReportsPage() {
+  const client = useSupabaseClient();
   const [concernsByStatus, setConcernsByStatus] = useState<StatusCount[]>([]);
-  const [eventsAttendance, setEventsAttendance] = useState<any[]>([]);
+  const [eventsAttendance, setEventsAttendance] = useState<AttendanceRow[]>([]);
   const [lostFoundResolution, setLostFoundResolution] = useState<StatusCount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchReports();
-  }, []);
+    void (async () => {
+      try {
+        // Concerns and lost & found are tallied client-side from the single
+        // status column (no GROUP BY in supabase-js); both tables are small.
+        const [concernsResult, eventsResult, lostFoundResult] = await Promise.all([
+          client.from("concerns").select("status"),
+          client
+            .from("events")
+            .select("title, capacity, event_registrations(count)")
+            .order("start_time", { ascending: false }),
+          client.from("lost_found_items").select("status"),
+        ]);
 
-  const fetchReports = async () => {
-    try {
-      // Concerns by status. `PostgrestFilterBuilder.group()` does not exist in
-      // supabase-js 2.117, so this tallies the single column it needs here.
-      // Move this into a Postgres view once these tables outgrow a few
-      // thousand rows.
-      const { data: concernRows, error: concernsError } = await supabase
-        .from('concerns')
-        .select('status');
+        if (concernsResult.error) throw concernsResult.error;
+        if (eventsResult.error) throw eventsResult.error;
+        if (lostFoundResult.error) throw lostFoundResult.error;
 
-      if (concernsError) throw concernsError;
+        setConcernsByStatus(countByStatus(concernsResult.data).map(({ status, count }) => ({ status: concernLabel(status), count })));
+        setEventsAttendance(
+          (eventsResult.data ?? []).map((row) => {
+            const embed = row as { title: string; capacity: number | null; event_registrations?: Array<{ count: number }> | null };
+            return {
+              title: embed.title,
+              capacity: embed.capacity,
+              registration_count: embed.event_registrations?.[0]?.count ?? 0,
+            };
+          }),
+        );
+        setLostFoundResolution(countByStatus(lostFoundResult.data).map(({ status, count }) => ({ status: concernLabel(status), count })));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load reports");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [client]);
 
-      const { data: eventsData, error: eventsError } = await supabase
-        .from('events')
-        .select('title, capacity, event_registrations!inner(count)')
-        .order('start_time', { ascending: false });
-
-      if (eventsError) throw eventsError;
-
-      const { data: itemRows, error: lostFoundError } = await supabase
-        .from('lost_found_items')
-        .select('status');
-
-      if (lostFoundError) throw lostFoundError;
-
-      setConcernsByStatus(countByStatus(concernRows));
-      setEventsAttendance(eventsData ?? []);
-      setLostFoundResolution(countByStatus(itemRows));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load reports');
-    } finally {
-      setLoading(false);
+  const exportCsv = () => {
+    if (concernsByStatus.length === 0 && eventsAttendance.length === 0 && lostFoundResolution.length === 0) {
+      toast.info("No report data to export yet");
+      return;
     }
-  };
 
-  if (loading) return <CampusPage page="reports" />;
-  if (error) return <CampusPage page="reports" >Error loading reports: {error}</CampusPage>;
+    const rows: string[][] = [["Report", "Item", "Count", "Total"]];
+    for (const bucket of concernsByStatus) {
+      rows.push(["Concerns by status", bucket.status, String(bucket.count), String(concernsByStatus.reduce((sum, b) => sum + b.count, 0))]);
+    }
+    for (const event of eventsAttendance) {
+      rows.push(["Events by attendance", event.title, String(event.registration_count), event.capacity == null ? "unlimited" : String(event.capacity)]);
+    }
+    const itemTotal = lostFoundResolution.reduce((sum, b) => sum + b.count, 0);
+    for (const bucket of lostFoundResolution) {
+      rows.push(["Lost & found resolution", bucket.status, String(bucket.count), String(itemTotal)]);
+    }
+
+    downloadCsv(`campusconnect-reports-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+    toast.success("Report exported as CSV");
+  };
 
   return (
     <CampusPage page="reports">
-      <div className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="border rounded-lg p-4">
-            <h3 className="mb-4 font-semibold">Concerns by Status</h3>
-            <div className="space-y-3">
-              {concernsByStatus.map((item) => (
-                <div key={item.status} className="flex justify-between">
-                  <span>{item.status}</span>
-                  <span>{item.count}</span>
-                </div>
-              ))}
-            </div>
+      {loading ? (
+        <div className="section-panel p-0 text-center py-8 text-muted-foreground">Loading reports…</div>
+      ) : error ? (
+        <div className="rounded-md bg-danger-soft p-4 text-sm text-danger">{error}</div>
+      ) : (
+        <>
+          <div className="mb-6 flex justify-end">
+            <Button onClick={exportCsv}>
+              <Download />
+              Export CSV
+            </Button>
           </div>
-
-          <div className="border rounded-lg p-4">
-            <h3 className="mb-4 font-semibold">Events Attendance</h3>
-            <div className="space-y-3">
-              {eventsAttendance.map((event) => (
-                <div key={event.id} className="flex justify-between space-x-2">
-                  <div>
-                    <span className="font-medium">{event.title}</span>
-                  </div>
-                  <div className="text-right space-x-2">
-                    <span>{event.event_registrations?.[0]?.count ?? 0}/{event.capacity}</span>
-                    <span className="text-xs text-muted-foreground">
-                      ({(event.event_registrations?.[0]?.count ?? 0) / event.capacity * 100}% full)
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="border rounded-lg p-4">
-          <h3 className="mb-4 font-semibold">Lost & Found Resolution Rate</h3>
-          <div className="space-y-3">
-            {lostFoundResolution.map((item) => (
-              <div key={item.status} className="flex justify-between">
-                <span>{item.status}</span>
-                <span>{item.count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+          <AdminDashboard
+            reports
+            stats={{
+              totalUsers: concernsByStatus.reduce((sum, b) => sum + b.count, 0),
+              activeConcerns: (concernsByStatus.find((b) => b.status === "Pending")?.count ?? 0) + (concernsByStatus.find((b) => b.status === "In Progress")?.count ?? 0),
+              upcomingEvents: eventsAttendance.length,
+              openItems: lostFoundResolution.find((b) => b.status === "Reported")?.count ?? 0,
+            }}
+            concernsByStatus={concernsByStatus}
+            eventsAttendance={eventsAttendance.map((e) => ({ title: e.title, capacity: e.capacity ?? 0, event_registrations: [{ count: e.registration_count }] }))}
+            lostFoundResolution={lostFoundResolution}
+          />
+        </>
+      )}
     </CampusPage>
   );
 }

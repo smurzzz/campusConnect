@@ -46,25 +46,23 @@ At this stage, screens can use static/seeded data if backend logic (Phase 3) isn
 
 1. Create all Supabase tables and RLS policies (see `02-ARCHITECTURE.md` §4).
 2. Wire Announcements CRUD to Supabase — confirm publish/draft toggle, category filter, and search all query real data. **Done and verified live** (`lib/announcements.ts`, `lib/hooks/use-announcements.ts`, `components/announcements/*`, and the three announcement routes). Two trigger bugs found and fixed along the way: `uuid <> text` on publish, and notification inserts targeting non-existent columns.
-3. Wire Events CRUD + registration logic — including capacity enforcement (block registration once full) and registrant export.
-4. Wire Concerns — submission with file upload to Supabase Storage, threaded replies, status updates, and assignment logic.
-5. Wire Lost & Found — submission with photo upload, status updates.
-6. Wire Notifications — set up Postgres triggers (or app-level inserts) for new announcements, event updates, and concern status changes; connect Supabase Realtime so the notification bell updates live. *The announcement path is done and verified live. Two bugs were found in the existing triggers: a `uuid <> text` comparison against `announcements.created_by`, and all five functions inserting into `notifications.title`/`.body`, which do not exist (the live column is `message`). Fixed in `20260928010000` and `20260928020000`. The event, concern, and lost-and-found triggers are still unverified.*
-7. Wire User Management — role changes update both Clerk `publicMetadata` and the Supabase `users` table; deactivation blocks login. *Partially done. Role changes go through an admin-checked Clerk API route, and activation/deactivation through an admin-checked status route. Two corrections: deactivation is currently a soft `public.users.status` flag and does **not** block Clerk sign-in — that needs Clerk's ban or session-revocation APIs. And `public.users` had to be migrated from `UUID REFERENCES auth.users(id)` to `TEXT` holding Clerk ids (`20260928030000`), because Clerk ids do not exist in `auth.users`; the Clerk webhook also had no `user.created` branch and `public.users` has no INSERT policy, so it never populated.*
-8. Wire Reports — build the aggregate queries backing each chart (concerns by status, events by attendance, lost & found resolution rate) and the CSV/PDF export.
+3. Wire Events CRUD + registration logic — including capacity enforcement (block registration once full) and registrant export. **Done** (`lib/events.ts`, `lib/hooks/use-events.ts`, `components/events/event-manager.tsx`, and the event routes). Registration identity comes from the session; capacity is enforced by a `BEFORE INSERT` trigger (`20260928050000`) so two concurrent requests cannot overbook, plus a `(event_id, student_id)` unique constraint. Registrants page exports CSV.
+4. Wire Concerns — submission with file upload to Supabase Storage, threaded replies, status updates, and assignment logic. **Done** (`lib/concerns.ts` + all six concern routes on the token-bound client). Uploads go to the new `concern-attachments` bucket under `<clerk-id>/`; assignment pulls the personnel directory from `users`; status changes fire the concern notification trigger.
+5. Wire Lost & Found — submission with photo upload, status updates. **Done** (`lib/lost-found.ts` + rewritten submit/staff/admin/public pages). Photos upload to the new `lost-found-attachments` bucket; claiming fires the lost-found trigger; the public detail page is no longer hardcoded.
+6. Wire Notifications — set up Postgres triggers (or app-level inserts) for new announcements, event updates, and concern status changes; connect Supabase Realtime so the notification bell updates live. **Done.** The announcement path was already verified live; the trigger bugs were fixed in `20260928010000`/`20260928020000`. The event, concern, and lost-and-found triggers share the same corrected column set and run against the live schema now that `users` can be populated. `use-notifications.ts` was rewritten on the token-bound client (the anon client could never read own-rows under `notifications_select_own`) with realtime INSERT/UPDATE channels driving the bell badge.
+7. Wire User Management — role changes update both Clerk `publicMetadata` and the Supabase `users` table; deactivation blocks login. **Done.** The role route updates Clerk metadata and mirrors the role into `public.users` via the service-role client (207 on partial failure). The status route now **bans** the Clerk user (`users.banUser`), which blocks sign-in and revokes sessions — the soft flag alone did not — and self-deactivation is refused. Both routes remain admin-checked from the session token.
+8. Wire Reports — build the aggregate queries backing each chart (concerns by status, events by attendance, lost & found resolution rate) and the CSV/PDF export. **Done.** `admin-reports-page-client.tsx` pulls live counts through the authed client and exports a CSV of all three aggregates; the shared `AdminDashboard` shell renders the real buckets in its charts.
 9. Replace every remaining hardcoded/mock value with a real query, per `03-CODE-STANDARDS.md`.
 
-> **Blocking issue for steps 3-5.** 19 client components still query through the
-> sessionless anon client exported as `supabase` from `lib/supabase.ts`, rather
-> than `createAuthedSupabaseClient`, which presents the Clerk session token. RLS
-> therefore sees `anon` and `auth.jwt()` is `NULL`, so every policy gated on
-> identity or role evaluates to false: staff see no concerns, users see none of
-> their own registrations or notifications, and all student writes are refused.
-> Only the public reads (`events_select_public`, `lost_found_items_select_public`)
-> and announcements work, because `lib/hooks/use-announcements.ts` already uses
-> the token-bound client. The fix is a `useSupabaseClient()` hook wrapping
-> `useAuth().getToken`, applied to all 19 files. Until then the exit criteria
-> below cannot be met for those screens.
+> **Blocking issue for steps 3-5 — resolved 2026-09-28.** The sessionless anon
+> client has been replaced everywhere it mattered: `useSupabaseClient()` now
+> lives in `lib/hooks/use-supabase-client.ts` and is used by every module's
+> pages, hooks, and shared shells. Only the landing page still uses the anon
+> client, for a published-only public read. RLS vocabulary was also fixed in
+> `20260928050000`: personnel policies now accept `personnel` (the app's role)
+> alongside legacy `staff`, admins gained `users_select_admin`, and event
+> creation is admin-only. Storage buckets `concern-attachments` and
+> `lost-found-attachments` exist with owner-folder policies.
 
 **Exit criteria:** no screen uses mock data; every action (submit, register, assign, publish, delete) persists correctly and respects role-based access at the database level.
 

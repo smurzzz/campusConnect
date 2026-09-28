@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { auth } from '@clerk/nextjs/server'
+import { auth, clerkClient } from '@clerk/nextjs/server'
 
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { ROLES } from '@/lib/constants/roles'
@@ -11,11 +11,13 @@ type UserStatus = (typeof STATUSES)[number]
 /**
  * Activates or deactivates a user.
  *
- * This replaces the `activateUser`/`deactivateUser` server actions, which were
- * callable by any signed-in user and had no authorisation check.
+ * Deactivation bans the Clerk account (`ban()`), which blocks sign-in and
+ * revokes existing sessions — the previous soft `public.users.status` flag
+ * alone did not stop a deactivated user from logging back in. The flag is
+ * still mirrored into `public.users.status` for Supabase-side reporting.
  *
- * The status is a soft flag on `public.users`. It does not block Clerk sign-in;
- * that would require Clerk's ban or session-revocation APIs.
+ * Authorisation: only an admin may change account status, checked from the
+ * signed session token before the body is trusted.
  */
 export async function PUT(
   request: Request,
@@ -48,9 +50,25 @@ export async function PUT(
       )
     }
 
-    // Service-role client: `public.users` has no admin UPDATE policy, only
-    // `users_update_own`, so an RLS-checked write would match zero rows. The
-    // admin check above is the authorisation for this write.
+    // Guard rail: an admin cannot deactivate their own account and lock
+    // every other admin out of user management.
+    if (status === 'deactivated' && targetId === callerId) {
+      return NextResponse.json(
+        { error: 'You cannot deactivate your own account' },
+        { status: 400 },
+      )
+    }
+
+    const clerk = await clerkClient()
+
+    if (status === 'deactivated') {
+      await clerk.users.banUser(targetId)
+    } else {
+      await clerk.users.unbanUser(targetId)
+    }
+
+    // Mirror the soft flag for reporting. Service role is required because
+    // `public.users` has no admin UPDATE policy (only `users_update_own`).
     const { data, error } = await createSupabaseAdminClient()
       .from('users')
       .update({ status: status as UserStatus })
@@ -58,9 +76,15 @@ export async function PUT(
       .select('id, status')
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('Clerk ban state updated but Supabase sync failed:', error)
+      return NextResponse.json(
+        { success: true, user: { id: targetId, status }, supabaseSynced: false },
+        { status: 207 },
+      )
+    }
 
-    return NextResponse.json({ success: true, user: data })
+    return NextResponse.json({ success: true, user: data, supabaseSynced: true })
   } catch (error) {
     console.error('Error updating user status:', error)
     return NextResponse.json(

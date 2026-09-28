@@ -1,42 +1,50 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
-import type { Database } from "@/lib/supabase";
-import { CampusPage } from "@/components/campus-page";
-import { LostFound } from "@/components/campus-page";
+
+import { CampusPage, LostFound } from "@/components/campus-page";
+import { Skeleton } from "@/components/ui/skeleton";
+import { listLostFoundItems, type LostFoundListItem } from "@/lib/lost-found";
+import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
 
 export default function LostFoundPage() {
-  const [lostFoundItems, setLostFoundItems] = useState<Database["public"]["Tables"]["lost_found_items"]["Row"][]>([]);
+  const client = useSupabaseClient();
+  const [items, setItems] = useState<LostFoundListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchLostFoundItems();
-  }, []);
-
-  const fetchLostFoundItems = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('lost_found_items')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setLostFoundItems(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
+    void (async () => {
+      const result = await listLostFoundItems(client);
+      if (result.error) setError(result.error);
+      setItems(result.rows);
       setLoading(false);
-    }
-  };
+    })();
+  }, [client]);
 
-  if (loading) return <CampusPage page="lost-found" />;
-  if (error) return <CampusPage page="lost-found" >Error loading lost & found items: {error}</CampusPage>;
+  if (loading) {
+    return (
+      <CampusPage page="lost-found">
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true" aria-label="Loading items">
+          {[0, 1, 2, 3].map((index) => (
+            <Skeleton key={index} className="h-64 w-full rounded-xl" />
+          ))}
+        </div>
+      </CampusPage>
+    );
+  }
+
+  if (error) {
+    return (
+      <CampusPage page="lost-found">
+        Error loading lost & found items: {error}
+      </CampusPage>
+    );
+  }
 
   return (
     <CampusPage page="lost-found">
-      <LostFound items={lostFoundItems} />
+      <LostFound items={items} />
     </CampusPage>
   );
 }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { CampusPage } from "@/components/campus-page";
+import LostFoundDetailClient from "./lost-found-detail-client";
 
 export const metadata: Metadata = {
   title: "Item — CampusConnect",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function LostFoundDetailPage() {
-  return <CampusPage page="lost-detail" />;
+  return <LostFoundDetailClient />;
 }

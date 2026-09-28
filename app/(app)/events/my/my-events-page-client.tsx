@@ -1,158 +1,116 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-
-import { CampusPage } from "@/components/campus-page";
-import { Button } from "@/components/ui/button";
-import { useUser } from "@clerk/nextjs";
+import { useState } from "react";
+import { CalendarDays, MapPin, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
-import { registerForEvent, unregisterFromEvent, getEventRegistrations } from "@/lib/actions";
+
+import { CampusPage, EmptyState, StatusBadge } from "@/components/campus-page";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useMyRegistrations } from "@/lib/hooks/use-events";
+import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
+import { unregisterFromEvent } from "@/lib/events";
+
+function formatWhen(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+}
 
 export default function MyEventsPage() {
-  const [events, setEvents] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const { user } = useUser();
+  const client = useSupabaseClient();
+  const { registrations, loading, error, refresh } = useMyRegistrations();
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchMyEvents();
-  }, [user]);
-
-  const fetchMyEvents = async () => {
-    if (!user) {
-      setEvents([]);
-      setLoading(false);
-      return;
-    }
-
+  const handleCancel = async (eventId: string) => {
+    setPendingId(eventId);
     try {
-      const { data, error } = await supabase
-        .from('event_registrations')
-        .select(`
-          id,
-          event_id,
-          registered_at,
-          status,
-          event:events!event_registrations_event_id_fkey (
-            id,
-            title,
-            description,
-            category,
-            location,
-            start_time,
-            end_time,
-            capacity,
-            cover_image_url,
-            created_by
-          )
-        `)
-        .eq('student_id', user.id)
-        .order('registered_at', { ascending: false });
-
-      if (error) throw error;
-
-      // Format the data for easier consumption
-      const formattedEvents = data.map((registration: any) => ({
-        id: registration.event.id,
-        title: registration.event.title,
-        description: registration.event.description,
-        category: registration.event.category,
-        location: registration.event.location,
-        startTime: registration.event.start_time,
-        endTime: registration.event.end_time,
-        capacity: registration.event.capacity,
-        coverImageUrl: registration.event.cover_image_url,
-        registeredAt: registration.registered_at,
-        registrationStatus: registration.status,
-      }));
-
-      setEvents(formattedEvents);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load your events');
+      const result = await unregisterFromEvent(client, eventId);
+      if (!result.ok) {
+        toast.error("Couldn't cancel registration", { description: result.error });
+        return;
+      }
+      toast.success("Registration cancelled");
+      await refresh();
     } finally {
-      setLoading(false);
+      setPendingId(null);
     }
   };
-
-  const handleRegister = async (eventId: string) => {
-    try {
-      await registerForEvent(eventId);
-      await fetchMyEvents(); // Refresh the list
-      toast.success("Successfully registered for event!");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to register for event');
-      toast.error("Failed to register for event");
-    }
-  };
-
-  const handleUnregister = async (eventId: string) => {
-    try {
-      await unregisterFromEvent(eventId);
-      await fetchMyEvents(); // Refresh the list
-      toast.success("Successfully unregistered from event");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to unregister from event');
-      toast.error("Failed to unregister from event");
-    }
-  };
-
-  if (loading) return <CampusPage page="my-events" />;
-  if (error) return <CampusPage page="my-events" >{error}</CampusPage>;
 
   return (
     <CampusPage page="my-events">
-      <div className="space-y-6">
-        {events.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">You haven't registered for any events yet.</p>
+      {error && (
+        <div className="mb-5 rounded-md bg-danger-soft p-4 text-sm text-danger">{error}</div>
+      )}
+
+      {loading ? (
+        <div className="space-y-4" aria-busy="true" aria-label="Loading your events">
+          {[0, 1, 2].map((index) => (
+            <Skeleton key={index} className="h-28 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : registrations.length === 0 ? (
+        <EmptyState
+          title="You're not registered for any events"
+          text="Browse campus events and register for the ones you want to attend."
+          action={
             <Button asChild>
-              <Link href="/events">Browse upcoming events</Link>
+              <Link href="/events">
+                <Plus /> Browse events
+              </Link>
             </Button>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {events.map((event) => (
-              <div key={event.id} className="border rounded-lg p-4">
-                <div className="mb-4">
-                  <h2 className="text-lg font-semibold">{event.title}</h2>
-                  <p className="text-sm text-muted-foreground mb-2">{event.category}</p>
-                </div>
-                <div className="grid gap-4 mb-4">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">When</p>
-                    <p className="text-base">
-                      {new Date(event.startTime).toLocaleDateString()} at {new Date(event.startTime).toLocaleTimeString()}
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          {registrations.map(({ id, event, registered_at }) => {
+            if (!event) return null;
+            const startsAt = new Date(event.start_time);
+            const past = startsAt.getTime() < Date.now();
+
+            return (
+              <div className="content-card flex flex-col justify-between gap-4 sm:flex-row sm:items-center" key={id}>
+                <div className="flex items-center gap-4">
+                  <span className="grid size-14 shrink-0 place-items-center rounded-md bg-primary-soft text-xs font-bold text-primary">
+                    {startsAt.toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                  </span>
+                  <div className="min-w-0">
+                    <h2 className="truncate font-bold">
+                      <Link href={`/events/${event.id}`} className="hover:text-primary hover:underline">
+                        {event.title}
+                      </Link>
+                    </h2>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <CalendarDays className="size-4" /> {formatWhen(event.start_time)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <MapPin className="size-4" /> {event.location ?? "TBA"}
+                      </span>
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Registered {formatWhen(registered_at)}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Where</p>
-                    <p className="text-base">{event.location}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Capacity</p>
-                    <p className="text-base">{/* TODO: Get actual registered count */} / {event.capacity}</p>
-                  </div>
                 </div>
-                <div className="mt-4">
-                  <p className="text-sm font-medium text-muted-foreground mb-2">Description</p>
-                  <p className="text-base text-muted-foreground">{event.description}</p>
-                </div>
-                <div className="flex justify-end">
-                  <Button
-                    variant="outline"
-                    onClick={() => handleUnregister(event.id)}
-                    className="w-[160px]"
-                  >
-                    Unregister
-                  </Button>
+                <div className="flex shrink-0 items-center gap-3">
+                  <StatusBadge status={past ? "Past" : "Upcoming"} />
+                  {!past && (
+                    <Button
+                      variant="outline"
+                      disabled={pendingId === event.id}
+                      onClick={() => void handleCancel(event.id)}
+                    >
+                      {pendingId === event.id ? "Cancelling…" : "Cancel registration"}
+                    </Button>
+                  )}
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </CampusPage>
   );
 }

@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuth, useUser } from "@clerk/nextjs";
+import { useCallback, useEffect, useState } from "react";
+import { useUser } from "@clerk/nextjs";
 
 import { useRole } from "@/lib/clerk/use-role";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
-import { createAuthedSupabaseClient, type Database } from "@/lib/supabase";
+import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
+import type { Database } from "@/lib/supabase";
 import {
   ANNOUNCEMENTS_PAGE_SIZE,
   createAnnouncement as createAnnouncementRow,
@@ -24,21 +25,6 @@ import {
   type PublicationStatus,
 } from "@/lib/constants/statuses";
 import type { AnnouncementCategory } from "@/lib/constants/categories";
-import type { SupabaseClient } from "@supabase/supabase-js";
-
-/**
- * Supabase client bound to the Clerk session token, so RLS sees a real
- * `auth.uid()` and the `role` claim from the session token's public metadata.
- * Without it every admin policy (`auth.jwt() ->> 'role' = 'admin'`) fails.
- */
-export function useSupabaseClient(): SupabaseClient<Database> {
-  const { getToken, isLoaded } = useAuth();
-  const client = useMemo(
-    () => createAuthedSupabaseClient(async () => (isLoaded ? getToken() : null)),
-    [getToken, isLoaded],
-  );
-  return client;
-}
 
 export type AnnouncementQuery = {
   /**

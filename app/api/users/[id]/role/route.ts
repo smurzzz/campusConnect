@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { clerkClient, auth } from '@clerk/nextjs/server'
 
+import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 import { ROLES, isRole } from '@/lib/constants/roles'
 import { getSessionRole } from '@/lib/clerk/roles'
 
@@ -52,7 +53,26 @@ export async function PUT(
       publicMetadata: { role },
     })
 
-    return NextResponse.json({ success: true, userId: updatedUser.id, role })
+    // Mirror the role into `public.users` so Supabase-side consumers (report
+    // joins, personnel directories) agree with Clerk. Service role is used
+    // because `users` has no admin UPDATE policy; the admin check above is
+    // the authorisation for this write.
+    const { error: syncError } = await createSupabaseAdminClient()
+      .from('users')
+      .update({ role })
+      .eq('id', targetId)
+
+    if (syncError) {
+      // The Clerk change already happened; report partial success rather
+      // than leaving the caller unsure whether to retry.
+      console.error('Clerk role updated but Supabase sync failed:', syncError)
+      return NextResponse.json(
+        { success: true, userId: updatedUser.id, role, supabaseSynced: false },
+        { status: 207 },
+      )
+    }
+
+    return NextResponse.json({ success: true, userId: updatedUser.id, role, supabaseSynced: true })
   } catch (error) {
     console.error('Error updating user role in Clerk:', error)
     return NextResponse.json(

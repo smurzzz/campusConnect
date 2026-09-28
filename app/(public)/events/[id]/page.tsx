@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { CampusPage } from "@/components/campus-page";
+import EventDetailClient from "./event-detail-client";
 
 export const metadata: Metadata = {
   title: "Event — CampusConnect",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function EventDetailPage() {
-  return <CampusPage page="event-detail" />;
+  return <EventDetailClient />;
 }
