@@ -1,9 +1,27 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
+/**
+ * Anon client with no session. Only safe for public reads (published
+ * announcements/events) — RLS sees `anon` and rejects every write.
+ */
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+/**
+ * Client that presents the Clerk session token as the Supabase access token.
+ * Every write goes through this so RLS sees a real `auth.uid()` and the
+ * `role` claim from the session token's public metadata — without it the
+ * admin policies (`auth.jwt() ->> 'role' = 'admin'`) can never pass.
+ */
+export function createAuthedSupabaseClient(
+  getToken: () => Promise<string | null>,
+): SupabaseClient<Database> {
+  return createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    accessToken: async () => (await getToken()) ?? supabaseAnonKey,
+  })
+}
 
 // Types for our database tables
 export type Database = {
@@ -18,7 +36,7 @@ export type Database = {
           status: string
           audience: string | null
           image_url: string | null
-          created_by: string
+          created_by: string | null
           created_at: string
         }
         Insert: {
@@ -29,7 +47,7 @@ export type Database = {
           status?: string
           audience?: string | null
           image_url?: string | null
-          created_by?: string
+          created_by?: string | null
           created_at?: string
         }
         Update: {
@@ -137,6 +155,45 @@ export type Database = {
           {
             foreignKeyName: "event_registrations_student_id_fkey"
             columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      concern_messages: {
+        Row: {
+          id: string
+          concern_id: string | null
+          sender_id: string | null
+          message: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          concern_id?: string | null
+          sender_id?: string | null
+          message: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          concern_id?: string | null
+          sender_id?: string | null
+          message?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "concern_messages_concern_id_fkey"
+            columns: ["concern_id"]
+            isOneToOne: false
+            referencedRelation: "concerns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "concern_messages_sender_id_fkey"
+            columns: ["sender_id"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -320,6 +377,7 @@ export type Database = {
           email: string | null
           campus_id: string | null
           role: string
+          status: string
           avatar_url: string | null
           contact_number: string | null
           created_at: string
@@ -330,6 +388,7 @@ export type Database = {
           email?: string | null
           campus_id?: string | null
           role?: string
+          status?: string
           avatar_url?: string | null
           contact_number?: string | null
           created_at?: string
@@ -340,19 +399,15 @@ export type Database = {
           email?: string | null
           campus_id?: string | null
           role?: string
+          status?: string
           avatar_url?: string | null
           contact_number?: string | null
           created_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "users_id_fkey"
-            columns: ["id"]
-            isOneToOne: true
-            referencedRelation: "auth.users"
-            referencedColumns: ["id"]
-          }
-        ]
+        // The `users_id_fkey` relationship into `auth.users` is intentionally
+        // absent: identity is owned by Clerk, and that foreign key was dropped
+        // in 20260928030000_migrate_users_id_to_clerk_text.sql.
+        Relationships: []
       }
     }
     Views: {
@@ -700,14 +755,39 @@ export async function updateUser(id: string, user: Database['public']['Tables'][
 }
 
 // Reports & Analytics
+
+/**
+ * Tallies rows by a derived key, returning the `{ status, count }[]` shape the
+ * report charts consume. Null/empty keys collapse to `"Unspecified"` so no
+ * bucket silently disappears from the chart.
+ */
+function countBy<T>(rows: T[] | null, key: (row: T) => string | null | undefined) {
+  const counts = new Map<string, number>()
+
+  for (const row of rows ?? []) {
+    const bucket = key(row) || 'Unspecified'
+    counts.set(bucket, (counts.get(bucket) ?? 0) + 1)
+  }
+
+  return [...counts.entries()]
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count)
+}
+
+/**
+ * Counts concerns per status.
+ *
+ * `PostgrestFilterBuilder.group()` does not exist in supabase-js 2.117, so this
+ * pulls the single column it needs and tallies it here rather than pretending a
+ * server-side `GROUP BY` is available. Swap for a Postgres view + `.single()`
+ * if the concern table ever grows past a few thousand rows.
+ */
 export async function getConcernsByStatus() {
-  const { data, error } = await supabase
-    .from('concerns')
-    .select('status, count')
-    .group('status')
+  const { data, error } = await supabase.from('concerns').select('status')
 
   if (error) throw error
-  return data
+
+  return countBy(data, (row) => row.status as string)
 }
 
 export async function getEventsAttendance() {
@@ -720,14 +800,13 @@ export async function getEventsAttendance() {
   return data
 }
 
+/** @see getConcernsByStatus — same reason, no `.group()` in supabase-js 2.117. */
 export async function getLostFoundResolutionRate() {
-  const { data, error } = await supabase
-    .from('lost_found_items')
-    .select('status, count')
-    .group('status')
+  const { data, error } = await supabase.from('lost_found_items').select('status')
 
   if (error) throw error
-  return data
+
+  return countBy(data, (row) => row.status as string)
 }
 
 // Seeded Campus IDs

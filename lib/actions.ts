@@ -1,20 +1,23 @@
 'use server';
 
 import { supabase } from '@/lib/supabase';
-import { useUser } from '@clerk/nextjs';
+// A React hook cannot be called inside a server action. `auth()` is the
+// server-side equivalent and returns the same Clerk user id.
+import { auth } from '@clerk/nextjs/server';
 
 export async function registerForEvent(eventId: string) {
-  const { user } = await useUser();
-  if (!user) {
+  const { userId } = await auth();
+  if (!userId) {
     throw new Error('User not authenticated');
   }
+
 
   // Check if already registered
   const { data: existingRegistration, error: checkError } = await supabase
     .from('event_registrations')
     .select('id')
     .eq('event_id', eventId)
-    .eq('student_id', user.id)
+    .eq('student_id', userId)
     .single();
 
   if (checkError && checkError.code !== 'PGRST116') { // PGRST116 means no rows returned
@@ -57,7 +60,7 @@ export async function registerForEvent(eventId: string) {
     .from('event_registrations')
     .insert({
       event_id: eventId,
-      student_id: user.id,
+      student_id: userId,
     })
     .select()
     .single();
@@ -68,8 +71,8 @@ export async function registerForEvent(eventId: string) {
 }
 
 export async function unregisterFromEvent(eventId: string) {
-  const { user } = await useUser();
-  if (!user) {
+  const { userId } = await auth();
+  if (!userId) {
     throw new Error('User not authenticated');
   }
 
@@ -77,7 +80,7 @@ export async function unregisterFromEvent(eventId: string) {
     .from('event_registrations')
     .delete()
     .eq('event_id', eventId)
-    .eq('student_id', user.id);
+    .eq('student_id', userId);
 
   if (error) throw error;
 }
@@ -101,55 +104,5 @@ export async function getEventRegistrations(eventId: string) {
     .order('registered_at', { ascending: true });
 
   if (error) throw error;
-  return data;
-}
-
-// User Management Actions
-export async function updateUserRole(userId: string, role: string) {
-  // In a real app, this would be an admin-only action
-  // For now, we'll update both Clerk and Supabase
-
-  // Update Supabase users table
-  const { data, error } = await supabase
-    .from('users')
-    .update({ role })
-    .eq('id', userId)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  // Note: Updating Clerk publicMetadata would require using Clerk's backend API
-  // This would typically be done in a Clerk webhook or backend route
-  // For this implementation, we're relying on the Supabase users table as the source of truth
-
-  return data;
-}
-
-export async function deactivateUser(userId: string) {
-  // In a real app, this would be an admin-only action
-  const { data, error } = await supabase
-    .from('users')
-    .update({ status: 'deactivated' })
-    .eq('id', userId)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  return data;
-}
-
-export async function activateUser(userId: string) {
-  // In a real app, this would be an admin-only action
-  const { data, error } = await supabase
-    .from('users')
-    .update({ status: 'active' })
-    .eq('id', userId)
-    .select()
-    .single();
-
-  if (error) throw error;
-
   return data;
 }

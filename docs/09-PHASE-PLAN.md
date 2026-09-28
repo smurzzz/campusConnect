@@ -45,14 +45,26 @@ At this stage, screens can use static/seeded data if backend logic (Phase 3) isn
 **Goal:** every screen from Phase 2 is now backed by real Supabase data with correct RLS, replacing any mock data.
 
 1. Create all Supabase tables and RLS policies (see `02-ARCHITECTURE.md` §4).
-2. Wire Announcements CRUD to Supabase — confirm publish/draft toggle, category filter, and search all query real data.
+2. Wire Announcements CRUD to Supabase — confirm publish/draft toggle, category filter, and search all query real data. **Done and verified live** (`lib/announcements.ts`, `lib/hooks/use-announcements.ts`, `components/announcements/*`, and the three announcement routes). Two trigger bugs found and fixed along the way: `uuid <> text` on publish, and notification inserts targeting non-existent columns.
 3. Wire Events CRUD + registration logic — including capacity enforcement (block registration once full) and registrant export.
 4. Wire Concerns — submission with file upload to Supabase Storage, threaded replies, status updates, and assignment logic.
 5. Wire Lost & Found — submission with photo upload, status updates.
-6. Wire Notifications — set up Postgres triggers (or app-level inserts) for new announcements, event updates, and concern status changes; connect Supabase Realtime so the notification bell updates live.
-7. Wire User Management — role changes update both Clerk `publicMetadata` and the Supabase `users` table; deactivation blocks login.
+6. Wire Notifications — set up Postgres triggers (or app-level inserts) for new announcements, event updates, and concern status changes; connect Supabase Realtime so the notification bell updates live. *The announcement path is done and verified live. Two bugs were found in the existing triggers: a `uuid <> text` comparison against `announcements.created_by`, and all five functions inserting into `notifications.title`/`.body`, which do not exist (the live column is `message`). Fixed in `20260928010000` and `20260928020000`. The event, concern, and lost-and-found triggers are still unverified.*
+7. Wire User Management — role changes update both Clerk `publicMetadata` and the Supabase `users` table; deactivation blocks login. *Partially done. Role changes go through an admin-checked Clerk API route, and activation/deactivation through an admin-checked status route. Two corrections: deactivation is currently a soft `public.users.status` flag and does **not** block Clerk sign-in — that needs Clerk's ban or session-revocation APIs. And `public.users` had to be migrated from `UUID REFERENCES auth.users(id)` to `TEXT` holding Clerk ids (`20260928030000`), because Clerk ids do not exist in `auth.users`; the Clerk webhook also had no `user.created` branch and `public.users` has no INSERT policy, so it never populated.*
 8. Wire Reports — build the aggregate queries backing each chart (concerns by status, events by attendance, lost & found resolution rate) and the CSV/PDF export.
 9. Replace every remaining hardcoded/mock value with a real query, per `03-CODE-STANDARDS.md`.
+
+> **Blocking issue for steps 3-5.** 19 client components still query through the
+> sessionless anon client exported as `supabase` from `lib/supabase.ts`, rather
+> than `createAuthedSupabaseClient`, which presents the Clerk session token. RLS
+> therefore sees `anon` and `auth.jwt()` is `NULL`, so every policy gated on
+> identity or role evaluates to false: staff see no concerns, users see none of
+> their own registrations or notifications, and all student writes are refused.
+> Only the public reads (`events_select_public`, `lost_found_items_select_public`)
+> and announcements work, because `lib/hooks/use-announcements.ts` already uses
+> the token-bound client. The fix is a `useSupabaseClient()` hook wrapping
+> `useAuth().getToken`, applied to all 19 files. Until then the exit criteria
+> below cannot be met for those screens.
 
 **Exit criteria:** no screen uses mock data; every action (submit, register, assign, publish, delete) persists correctly and respects role-based access at the database level.
 

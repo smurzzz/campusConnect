@@ -54,7 +54,11 @@ if (user.role === ROLES.ADMIN) { ... }
 
 ## 6. State & Performance
 - Avoid unnecessary `"use client"` — only mark a component client-side if it uses hooks, event handlers, or browser APIs.
+- A page that needs browser state is split in two, because Next forbids both in one file: `metadata` cannot be exported from a `"use client"` module, and a server module cannot import `useState`/`useEffect`.
+  - `app/**/page.tsx` — server component. Owns `export const metadata` and renders the client component.
+  - `app/**/<name>-client.tsx` — colocated, starts with `"use client"`, default-exports the interactive component, and holds no `metadata`.
 - Memoize expensive derived values (`useMemo`) only when a measurable re-render cost exists — don't over-optimize prematurely.
+- Derive loading state from the request that produced the data rather than setting a flag inside the effect. The `react-hooks/set-state-in-effect` rule rejects a synchronous `setState` in an effect body; keying state on the request and comparing (`state.key !== requestKey`) avoids the cascading render instead of suppressing the rule.
 - Debounce search inputs (300ms) before firing a query — never fire a request on every keystroke.
 - Use skeleton loaders, not blank screens or layout-shifting spinners, for perceived smoothness.
 - Images always go through `next/image` with defined `width`/`height` or `fill` + a sized parent — prevents layout shift (CLS).

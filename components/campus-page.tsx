@@ -13,21 +13,79 @@ import {
   LogIn, UserPlus, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useUser } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { dashboardRouteForRole } from "@/lib/constants/routes";
-import { useNotifications } from "@/hooks/use-notifications";
+import { useNotifications } from "@/lib/hooks/use-notifications";
+import { supabase } from "@/lib/supabase";
+import type { Database } from "@/lib/supabase";
+import { toPublicationLabel, statusTone, PUBLICATION_STATUSES, ITEM_STATUSES, ITEM_TYPES, type PublicationStatus, type ItemType } from "@/lib/constants/statuses";
+import { ANNOUNCEMENT_CATEGORIES, ANNOUNCEMENT_AUDIENCES } from "@/lib/constants/categories";
+import { useAnnouncementMutations, useAnnouncements } from "@/lib/hooks/use-announcements";
+import { isAnnouncementAudience, isAnnouncementCategory, type AnnouncementDraft, type AnnouncementRow as AnnouncementRecord } from "@/lib/announcements";
 
 type PageKey = string;
 type Role = "student" | "staff" | "admin";
 
 type Status = "Pending" | "In Progress" | "Resolved" | "Urgent" | "Published" | "Draft" | "Open" | "Claimed" | "Upcoming" | "Past" | "Active" | "Deactivated";
 
-// Removed mock data - all data now comes from Supabase
+/** Row shapes as they come back from Supabase, so list views stay typed. */
+type AnnouncementRow = Database["public"]["Tables"]["announcements"]["Row"];
+type EventRow = Database["public"]["Tables"]["events"]["Row"];
+type ConcernRow = Database["public"]["Tables"]["concerns"]["Row"];
+type LostFoundRow = Database["public"]["Tables"]["lost_found_items"]["Row"];
+
+/**
+ * View model for the concerns table. Deliberately looser than the
+ * `concerns` row: the list pages project a joined, denormalised shape
+ * (student name, assignee name) that no single column carries.
+ */
+type ConcernListItem = {
+  id: string;
+  subject: string;
+  category: string | null;
+  status: string;
+  submittedAt: string;
+  studentName?: string | null;
+  assignee?: string | null;
+};
+
+/** Cover gradients cycled across event cards so no two neighbours match. */
+const EVENT_COVER_TONES = ["bg-event-blue", "bg-event-green", "bg-event-amber"] as const;
+
+/** Tab order for the lost/found switcher. */
+const ITEM_STATUS_TAB_ORDER = [ITEM_TYPES.LOST, ITEM_TYPES.FOUND] as const;
+
+/** Number of body characters shown in a list card before truncating. */
+const ANNOUNCEMENT_EXCERPT_LENGTH = 180;
+
+function formatAnnouncementDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString(undefined, { dateStyle: "medium" });
+}
+
+function excerptFrom(body: string | null | undefined): string {
+  const text = (body ?? "").trim();
+  if (text.length <= ANNOUNCEMENT_EXCERPT_LENGTH) return text;
+  return `${text.slice(0, ANNOUNCEMENT_EXCERPT_LENGTH).trimEnd()}…`;
+}
+
+/** `lost_found_items.status` is stored lowercase; map it to the chip label. */
+function toItemStatusLabel(value: string | null | undefined): string {
+  return value === "claimed" ? ITEM_STATUSES.CLAIMED : ITEM_STATUSES.OPEN;
+}
+
+/** Status chip shared by every list and detail view; tone comes from the shared map. */
+export function StatusBadge({ status }: { status: string }) {
+  return <Badge tone={statusTone(status)}><span className="size-1.5 rounded-full bg-current" />{status}</Badge>;
+}
 
 const studentNav = [
   ["Dashboard", "/dashboard", LayoutDashboard], ["Announcements", "/announcements", Megaphone], ["Events", "/events", CalendarDays], ["Concerns", "/concerns", MessageSquareText], ["Lost & Found", "/lost-found", PackageSearch], ["Notifications", "/notifications", Bell], ["Profile", "/profile", UserRound],
@@ -38,16 +96,27 @@ const adminNav = [["Dashboard", "/admin/dashboard", LayoutDashboard], ["Announce
 function Brand({ compact = false }: { compact?: boolean }) {
   return <Link href="/" className="flex items-center gap-2.5"><span className="grid size-9 place-items-center rounded-lg bg-primary text-primary-foreground shadow-brand"><GraduationCap className="size-5" /></span>{!compact && <span className="text-lg font-bold text-foreground">Campus<span className="text-primary">Connect</span></span>}</Link>;
 }
-function StatusBadge({ status }: { status: Status | string }) {
-  const kind = ["Resolved","Published","Active","Claimed"].includes(status) ? "success" : ["Pending","In Progress","Draft","Upcoming"].includes(status) ? "warning" : ["Urgent","Deactivated"].includes(status) ? "danger" : "neutral";
-  return <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", `badge-${kind}`)}><span className="size-1.5 rounded-full bg-current" />{status}</span>;
-}
 function PublicNav() {
   const [open,setOpen]=useState(false);
   return <header className="sticky top-0 z-40 border-b border-border/80 bg-background/90 backdrop-blur-xl"><div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 lg:px-8"><Brand/><nav className="hidden items-center gap-8 md:flex"><Link href="/announcements" className="nav-link">Announcements</Link><Link href="/events" className="nav-link">Events</Link><Link href="/lost-found" className="nav-link">Lost & Found</Link></nav><div className="hidden items-center gap-2 md:flex"><Button variant="ghost" asChild><Link href="/login">Log in</Link></Button><Button asChild><Link href="/signup">Sign up</Link></Button></div><Button variant="ghost" size="icon" className="md:hidden" onClick={()=>setOpen(!open)} aria-label="Toggle menu">{open?<X/>:<Menu/>}</Button></div>{open&&<div className="border-t border-border bg-background px-5 py-4 md:hidden"><div className="grid gap-2"><Link href="/announcements" className="mobile-link">Announcements</Link><Link href="/events" className="mobile-link">Events</Link><Link href="/lost-found" className="mobile-link">Lost & Found</Link><Button asChild><Link href="/login">Log in</Link></Button></div></div>}</header>;
 }
+export function AnnouncementCards({ items, student=false, emptyText="Announcements will appear here once they are published." }: { items?: AnnouncementRow[]; student?: boolean; emptyText?: string }) {
+  if (!items || items.length === 0) return <EmptyState title="No announcements yet" text={emptyText}/>;
+  return <div className="space-y-3">{items.map((a,i)=><article key={a.id} className="content-card group animate-rise" style={{animationDelay:`${i*60}ms`}}><div className="flex flex-wrap items-center gap-2"><span className="category-badge">{a.category}</span><span className="text-xs text-muted-foreground">{formatAnnouncementDate(a.created_at)}</span>{student&&<StatusBadge status={toPublicationLabel(a.status)}/>}</div><h2 className="mt-3 text-lg font-semibold group-hover:text-primary">{a.title}</h2><p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">{excerptFrom(a.body)}</p><Link href={`/announcements/${a.id}${student?"?view=student":""}`} className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary">Read more <ArrowRight/></Link></article>)}</div>;
+}
+export function EventCards({ items, register=false }: { items?: EventRow[]; register?: boolean }) {
+  if (!items || items.length === 0) return <EmptyState title="No events yet" text="New campus events will appear here once they are published."/>;
+  return <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{items.map((e,i)=>{const startsAt=new Date(e.start_time);return <article key={e.id} className="event-card animate-rise" style={{animationDelay:`${i*70}ms`}}><div className={cn("relative flex h-40 items-end p-5",EVENT_COVER_TONES[i%3])}><span className="rounded-md bg-background/90 px-3 py-2 text-center text-xs font-bold text-foreground shadow-sm">{startsAt.toLocaleDateString(undefined,{month:"short"})}<strong className="block text-xl text-primary">{startsAt.getDate()}</strong></span></div><div className="p-5"><span className="category-badge">{e.category}</span><h2 className="mt-3 text-lg font-semibold">{e.title}</h2><div className="mt-4 space-y-2 text-sm text-muted-foreground"><p className="flex items-center gap-2"><CalendarDays/>{startsAt.toLocaleString()}</p><p className="flex items-center gap-2"><MapPin/>{e.location}</p>{register&&e.capacity!=null&&<p className="flex items-center gap-2"><UsersRound/>{e.capacity} spots</p>}</div><Button className="mt-5 w-full" variant={register?"default":"outline"} asChild><Link href={`/events/${e.id}${register?"?view=student":""}`}>{register?"Register":"View details"}</Link></Button></div></article>})}</div>;
+}
 function PublicShell({ children }: { children: ReactNode }) {
   return <div className="min-h-screen bg-background"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-10 lg:px-8 lg:py-14">{children}</main></div>;
+}
+/**
+ * Public-facing composition point: the guest shell plus a page header, so a
+ * server page can keep its own `metadata` and hand a Client Component the body.
+ */
+export function PublicPage({ title, text, actions, children }: { title: string; text: string; actions?: ReactNode; children: ReactNode }) {
+  return <PublicShell><div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h1 className="page-title">{title}</h1><p className="mt-2 max-w-2xl text-muted-foreground">{text}</p></div>{actions}</div>{children}</PublicShell>;
 }
 function AppShell({ role, title, subtitle, actions, children }: { role: Role; title: string; subtitle?: string; actions?: ReactNode; children: ReactNode }) {
   const { unreadCount } = useNotifications();
@@ -58,18 +127,13 @@ function AppShell({ role, title, subtitle, actions, children }: { role: Role; ti
 }
 function PageHeader({ title, text }: { title: string; text: string }) { return <div className="mb-8"><h1 className="page-title">{title}</h1><p className="mt-2 max-w-2xl text-muted-foreground">{text}</p></div>; }
 function Filters({ search="Search", extra=true, value, onValue }: { search?: string; extra?: boolean; value?: string; onValue?: (value:string)=>void }) { return <div className="mb-6 flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder={search} value={value} onChange={e=>onValue?.(e.target.value)}/></div>{extra&&<><select className="field-select"><option>All categories</option><option>Academic</option><option>Facilities</option><option>Community</option></select><Button variant="outline"><Filter/>Filters</Button></>}</div>; }
-function EmptyState({ title, text, action }: { title:string; text:string; action?:ReactNode }) { return <div className="empty-state animate-rise"><span className="empty-state-icon"><Inbox/></span><h2 className="mt-4 text-lg font-bold">{title}</h2><p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{text}</p>{action&&<div className="mt-5">{action}</div>}</div>; }
-function AnnouncementCards({ items, student=false }: { items?: typeof announcements[]; student?: boolean }) {
-  if (!items || items.length === 0) return <div className="space-y-3"><p className="text-muted-foreground">No announcements available.</p></div>;
-  return <div className="space-y-3">{items.map((a,i)=><article key={a.id} className="content-card group animate-rise" style={{animationDelay:`${i*60}ms`}}><div className="flex flex-wrap items-center gap-2"><span className="category-badge">{a.category}</span><span className="text-xs text-muted-foreground">{a.date}</span></div><h2 className="mt-3 text-lg font-semibold group-hover:text-primary">{a.title}</h2><p className="mt-2 text-sm leading-6 text-muted-foreground">{a.excerpt}</p><Link href={`/announcements/${a.id}${student?"?view=student":""}`} className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary">Read more <ArrowRight/></Link></article>)}</div>; }
-function EventCard({ items, register=false }: { items?: typeof events[]; register?: boolean }) {
-  if (!items || items.length === 0) return <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3"><p className="text-muted-foreground">No events available.</p></div>;
-  return <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{items.map((e,i)=><article key={e.id} className="event-card animate-rise" style={{animationDelay:`${i*70}ms`}}><div className={cn("relative flex h-40 items-end p-5",e.tone)}><span className="rounded-md bg-background/90 px-3 py-2 text-center text-xs font-bold text-foreground shadow-sm">{e.day.split(" ")[0]}<strong className="block text-xl text-primary">{e.day.split(" ")[1]}</strong></span></div><div className="p-5"><span className="category-badge">{e.category}</span><h2 className="mt-3 text-lg font-semibold">{e.title}</h2><div className="mt-4 space-y-2 text-sm text-muted-foreground"><p className="flex items-center gap-2"><CalendarDays/>{e.date}</p><p className="flex items-center gap-2"><MapPin/>{e.location}</p>{register&&<p className="flex items-center gap-2"><UsersRound/>{e.spots} spots left</p>}</div><Button className="mt-5 w-full" variant={register?"default":"outline"} asChild><Link href={`/events/${e.id}${register?"?view=student":""}`}>{register?"Register":"View details"}</Link></Button></div></article>)}</div>; }
-function StatCard({ label,value,icon,trend }: {label:string;value:string;icon:any;trend?:string}) { return <div className="stat-card"><div className="flex items-start justify-between"><div><p className="text-sm font-medium text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p>{trend&&<p className="mt-2 text-xs font-medium text-success"><TrendingUp className="mr-1 inline size-3"/>{trend}</p>}</div><span className="grid size-11 place-items-center rounded-lg bg-primary-soft text-primary">{icon}</span></div></div>; }
-function Section({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}) { return <section className="section-panel"><div className="mb-5 flex items-center justify-between"><h2 className="section-title">{title}</h2>{action}</div>{children}</section>; }
-function AssignConcernDialog({ concern }: { concern: typeof concerns[number] }) { const [assignee,setAssignee]=useState(concern.assignee); return <Dialog><DialogTrigger asChild><Button variant="ghost" size="icon" aria-label={`Assign ${concern.subject}`}><UserRound/></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Assign concern</DialogTitle><DialogDescription>Choose the personnel team responsible for {concern.id}.</DialogDescription></DialogHeader><div className="rounded-md border border-border bg-muted/50 p-4"><p className="text-sm font-semibold">{concern.subject}</p><p className="mt-1 text-xs text-muted-foreground">Submitted by {concern.studentName} · {concern.category}</p></div><FormField label="Assign to personnel"><select className="field-select w-full" value={assignee} onChange={e=>setAssignee(e.target.value)}><option>Unassigned</option><option>Facilities Team</option><option>Student Services</option><option>Safety Office</option><option>Academic Affairs</option></select></FormField><div className="flex items-start gap-3 rounded-md bg-primary-soft p-3 text-sm text-primary"><Bell className="mt-0.5 shrink-0"/><p>The selected team will be notified and can update the concern immediately.</p></div><DialogFooter><Button onClick={()=>toast.success(`${concern.id} assigned to ${assignee}`)}>Confirm assignment</Button></DialogFooter></DialogContent></Dialog>; }
-function ConcernsTable({ admin=false, staff=false, items=[] }: { admin?:boolean;staff?:boolean;items?: typeof concerns[] }) {
-  if(!items.length)return <EmptyState title="No concerns found" text="Try changing your search or filters. New concerns will appear here when submitted."/>;
+export function EmptyState({ title, text, action }: { title:string; text:string; action?:ReactNode }) { return <div className="empty-state animate-rise"><span className="empty-state-icon"><Inbox/></span><h2 className="mt-4 text-lg font-bold">{title}</h2><p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{text}</p>{action&&<div className="mt-5">{action}</div>}</div>; }
+function StatCard({ label,value,icon,trend }: {label:string;value:string|number;icon:any;trend?:string}) { return <div className="stat-card"><div className="flex items-start justify-between"><div><p className="text-sm font-medium text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p>{trend&&<p className="mt-2 text-xs font-medium text-success"><TrendingUp className="mr-1 inline size-3"/>{trend}</p>}</div><span className="grid size-11 place-items-center rounded-lg bg-primary-soft text-primary">{icon}</span></div></div>; }
+export function Section({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}) { return <section className="section-panel"><div className="mb-5 flex items-center justify-between"><h2 className="section-title">{title}</h2>{action}</div>{children}</section>; }
+function AssignConcernDialog({ concern }: { concern: ConcernListItem }) { const [assignee,setAssignee]=useState(concern.assignee ?? "Unassigned"); return <Dialog><DialogTrigger asChild><Button variant="ghost" size="icon" aria-label={`Assign ${concern.subject}`}><UserRound/></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Assign concern</DialogTitle><DialogDescription>Choose the personnel team responsible for {concern.id}.</DialogDescription></DialogHeader><div className="rounded-md border border-border bg-muted/50 p-4"><p className="text-sm font-semibold">{concern.subject}</p><p className="mt-1 text-xs text-muted-foreground">Submitted by {concern.studentName} · {concern.category}</p></div><FormField label="Assign to personnel"><select className="field-select w-full" value={assignee} onChange={e=>setAssignee(e.target.value)}><option>Unassigned</option><option>Facilities Team</option><option>Student Services</option><option>Safety Office</option><option>Academic Affairs</option></select></FormField><div className="flex items-start gap-3 rounded-md bg-primary-soft p-3 text-sm text-primary"><Bell className="mt-0.5 shrink-0"/><p>The selected team will be notified and can update the concern immediately.</p></div><DialogFooter><Button onClick={()=>toast.success(`${concern.id} assigned to ${assignee}`)}>Confirm assignment</Button></DialogFooter></DialogContent></Dialog>; }
+export function ConcernsTable({ admin=false, staff=false, items, concerns }: { admin?:boolean;staff?:boolean;items?: ConcernListItem[];concerns?: ConcernListItem[] }) {
+  const rows = items ?? concerns ?? [];
+  if(!rows.length)return <EmptyState title="No concerns found" text="Try changing your search or filters. New concerns will appear here when submitted."/>;
   return <div className="table-shell">
     <div className="hidden grid-cols-[1.6fr_1fr_1fr_1fr_1fr_auto] gap-4 border-b border-border bg-muted/60 px-5 py-3 text-xs font-semibold uppercase text-muted-foreground md:grid">
       <span>Subject</span>
@@ -79,7 +143,7 @@ function ConcernsTable({ admin=false, staff=false, items=[] }: { admin?:boolean;
       <span>Date</span>
       <span>Actions</span>
     </div>
-    {items.map(c=> (
+    {rows.map(c=> (
       <div key={c.id} className="data-grid-row md:grid-cols-[1.6fr_1fr_1fr_1fr_1fr_auto]">
         <div>
           <p className="font-semibold">{c.subject}</p>
@@ -106,14 +170,14 @@ function ConcernsTable({ admin=false, staff=false, items=[] }: { admin?:boolean;
               <Eye/>
             </Link>
           </Button>
-          {admin&&<AssignConcernDialog concern={c as unknown as typeof concerns[number]}/>}
+          {admin&&<AssignConcernDialog concern={c}/>}
         </div>
       </div>
     ))}
   </div>;
 }
 function ChangeRoleDialog({ name, currentRole }: { name:string; currentRole:string }) { const [role,setRole]=useState(currentRole); return <Dialog><DialogTrigger asChild><Button variant="ghost" size="icon" aria-label={`Change role for ${name}`}><Pencil/></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Change account role</DialogTitle><DialogDescription>Update the permissions available to {name}.</DialogDescription></DialogHeader><div className="flex items-center gap-3 rounded-md border border-border p-4"><span className="avatar">{name.split(" ").map(x=>x.charAt(0)).join("")}</span><div><p className="font-semibold">{name}</p><p className="text-xs text-muted-foreground">Current role: {currentRole}</p></div></div><FormField label="New role"><select className="field-select w-full" value={role} onChange={e=>setRole(e.target.value)}><option>Student</option><option>Personnel</option><option>Admin</option></select></FormField><div className="flex items-start gap-3 rounded-md bg-warning-soft p-3 text-sm text-warning"><AlertCircle className="mt-0.5 shrink-0"/><p>Permission changes take effect immediately. Admin access includes user and campus-wide management.</p></div><DialogFooter><Button onClick={()=>toast.success(`${name} is now ${role}`)}>Confirm role change</Button></DialogFooter></DialogContent></Dialog>; }
-function ManagementTable({kind, data}:{kind:"announcements"|"events"|"lost"|"users"; data?: any[]}) {
+export function ManagementTable({kind, data}:{kind:"announcements"|"events"|"lost"|"users"; data?: any[]}) {
   // Use real data if provided, otherwise show empty state
   const rows = (data || []).map((item) => {
     if (kind === "announcements") {
@@ -126,10 +190,10 @@ function ManagementTable({kind, data}:{kind:"announcements"|"events"|"lost"|"use
       return [item.full_name || `${item.first_name} ${item.last_name}`, item.email, item.role, item.status || "Active"];
     }
   });
-  return <div className="table-shell">{rows.map((r,i)=>{ const [name="", detail="", date="", status="Open"] = r; return <div key={i} className="data-grid-row md:grid-cols-[1.8fr_1fr_1fr_1fr_auto]"><div className="flex items-center gap-3">{kind==="users"&&<span className="grid size-9 place-items-center rounded-full bg-primary-soft font-semibold text-primary">{name.split(" ").map(x=>x.charAt(0)).join("")}</span>}<span className="font-semibold">{name}</span></div><div>{detail}</div><div>{date}</div><div><StatusBadge status={status}/></div><div className="flex gap-1">{kind==="users"?<ChangeRoleDialog name={name} currentRole={date}/>:<Button variant="ghost" size="icon" aria-label={`Edit ${name}`} onClick={()=>toast("Edit panel opened")}><Pencil/></Button>}<Button variant="ghost" size="icon" aria-label={`More options for ${name}`} onClick={()=>toast("More actions opened")}><MoreHorizontal/></Button></div></div>})}</div>;
+  return <div className="table-shell">{rows.map((r,i)=>{ const [name = "", detail = "", date = "", status = "Open"]: string[] = r; return <div key={i} className="data-grid-row md:grid-cols-[1.8fr_1fr_1fr_1fr_auto]"><div className="flex items-center gap-3">{kind==="users"&&<span className="grid size-9 place-items-center rounded-full bg-primary-soft font-semibold text-primary">{name.split(" ").map((x: string)=>x.charAt(0)).join("")}</span>}<span className="font-semibold">{name}</span></div><div>{detail}</div><div>{date}</div><div><StatusBadge status={status}/></div><div className="flex gap-1">{kind==="users"?<ChangeRoleDialog name={name} currentRole={date}/>:<Button variant="ghost" size="icon" aria-label={`Edit ${name}`} onClick={()=>toast("Edit panel opened")}><Pencil/></Button>}<Button variant="ghost" size="icon" aria-label={`More options for ${name}`} onClick={()=>toast("More actions opened")}><MoreHorizontal/></Button></div></div>})}</div>;
 }
 function MiniChart({type="bar"}:{type?:"bar"|"line"|"donut"}) { const vals=[42,64,48,76,58,88,72]; return <div className="mt-5 flex h-44 items-end gap-3 border-b border-border px-2 pb-0">{type==="donut"?<div className="mx-auto mb-5 grid size-36 place-items-center rounded-full bg-chart-ring"><div className="grid size-20 place-items-center rounded-full bg-card text-center"><span><strong className="block text-2xl">78%</strong><small className="text-muted-foreground">resolved</small></span></div></div>:vals.map((v,i)=><div key={i} className="flex h-full flex-1 items-end"><span className={cn("w-full rounded-t-sm",type==="line"?"bg-accent":"bg-primary/75")} style={{height:`${v}%`}}/></div>)}</div>; }
-function AdminDashboard({reports=false, stats, concernsByStatus, eventsAttendance, lostFoundResolution}:{reports?:boolean; stats?:{totalUsers:number; activeConcerns:number; upcomingEvents:number; openItems:number}; concernsByStatus?:Array<{status:string; count:number}>; eventsAttendance?:Array<{title:string; capacity:number; event_registrations:Array<{count:number}>}>; lostFoundResolution?:Array<{status:string; count:number}>}) {
+export function AdminDashboard({reports=false, stats, concernsByStatus, eventsAttendance, lostFoundResolution}:{reports?:boolean; stats?:{totalUsers:number; activeConcerns:number; upcomingEvents:number; openItems:number}; concernsByStatus?:Array<{status:string; count:number}>; eventsAttendance?:Array<{title:string; capacity:number; event_registrations:Array<{count:number}>}>; lostFoundResolution?:Array<{status:string; count:number}>}) {
   return <AppShell role="admin" title={reports?"Reports & insights":"Good afternoon, Dr. Lim"} subtitle={reports?"Understand service performance across the campus.":"Here’s what’s happening across CampusConnect today."} actions={reports?<Button onClick={()=>toast.success("Report export started")}><Download/>Export CSV/PDF</Button>:undefined}>
     <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard label={reports?"Concerns resolved":"Total users"} value={stats?.totalUsers ?? 0} icon={UsersRound} trend="8.4% this month"/>
@@ -328,7 +392,7 @@ function PublicList({eventsPage=false}:{eventsPage?:boolean}) {
   if (loading) return <div className="min-h-screen"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-12 lg:px-8"><div className="min-h-screen flex items-center justify-center">Loading...</div></main></div>;
   if (error) return <div className="min-h-screen"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-12 lg:px-8"><div className="min-h-screen flex items-center justify-center">Error: {error}</div></main></div>;
 
-  return <div className="min-h-screen"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-12 lg:px-8"><PageHeader title={eventsPage?"Campus events":"Announcements"} text={eventsPage?"Discover workshops, activities, and moments to connect.":"News and important information from across the university."}/><Filters search={eventsPage?"Search events":"Search announcements"}/>{eventsPage?<EventCard items={data}/> : <AnnouncementCards items={data}/>}<div className="mt-8 flex justify-center gap-2"><Button variant="outline" size="icon">1</Button><Button variant="ghost" size="icon">2</Button><Button variant="ghost" size="icon">3</Button></div></main></div>;
+  return <div className="min-h-screen"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-12 lg:px-8"><PageHeader title={eventsPage?"Campus events":"Announcements"} text={eventsPage?"Discover workshops, activities, and moments to connect.":"News and important information from across the university."}/><Filters search={eventsPage?"Search events":"Search announcements"}/>{eventsPage?<EventCards items={data}/> : <AnnouncementCards items={data}/>}<div className="mt-8 flex justify-center gap-2"><Button variant="outline" size="icon">1</Button><Button variant="ghost" size="icon">2</Button><Button variant="ghost" size="icon">3</Button></div></main></div>;
 }
 function StudentDashboard() {
   const [announcementsData, setAnnouncementsData] = useState<any[]>([]);
@@ -378,14 +442,15 @@ function Frame({title,subtitle,actions,children}:{title:string;subtitle?:string;
 function loginPrompt(){toast.info("Please log in to continue",{action:{label:"Log in",onClick:()=>{window.location.href="/login"}}})}
 function AnnouncementDetail(){return <Frame title="Enrollment schedule for Term 2" subtitle="Academic · Posted Sep 24, 2026"><Link href="/announcements" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-primary"><ArrowLeft/>Back to announcements</Link><article className="section-panel max-w-4xl"><span className="category-badge">Academic</span><div className="mt-6 overflow-hidden rounded-md bg-event-blue p-10 text-center"><BookOpen className="mx-auto size-16 text-primary"/></div><div className="prose-copy"><p>Online enrollment for Term 2 opens on Monday, September 28. Students are encouraged to review their assigned enrollment schedule and adviser notes in advance.</p><h2>Before you enroll</h2><p>Confirm that all outstanding academic and financial clearances are reflected in your student portal. Contact Student Services if any requirement appears incorrectly.</p><p>Enrollment help desks will be available in the Learning Commons from 8:00 AM to 5:00 PM throughout the week.</p></div></article></Frame>}
 function EventDetail(){const guest=useGuest();const[registered,setRegistered]=useState(false);return <Frame title="Innovation Week 2026" subtitle="A week of ideas, making, and collaboration."><div className="grid gap-6 xl:grid-cols-[1fr_340px]"><article className="section-panel"><div className="mb-6 flex h-64 items-center justify-center rounded-md bg-event-blue"><Sparkles className="size-20 text-primary"/></div><h2 className="section-title">About this event</h2><p className="mt-4 leading-7 text-muted-foreground">Join students, faculty, and industry mentors for hands-on workshops, startup showcases, design challenges, and conversations about the future of technology.</p></article><aside className="section-panel h-fit"><div className="space-y-4"><p className="flex gap-3"><CalendarDays className="text-primary"/><span><strong className="block">October 4, 2026</strong><small className="text-muted-foreground">9:00 AM – 5:00 PM</small></span></p><p className="flex gap-3"><MapPin className="text-primary"/><span><strong className="block">University Hall</strong><small className="text-muted-foreground">Main campus</small></span></p></div><div className="my-6 border-t border-border pt-5"><div className="mb-2 flex justify-between text-sm"><span className="font-medium">42 / 60 registered</span><span className="text-muted-foreground">18 spots left</span></div><Progress value={70}/></div><Button className="w-full" size="lg" variant={registered?"secondary":"default"} onClick={()=>{if(guest){loginPrompt();return}setRegistered(!registered);toast.success(registered?"Registration cancelled":"You’re registered!")}}>{registered?<><Check/>Registered</>:"Register for this event"}</Button></aside></div></Frame>}
-function LostFound({ items=[] }:{ items?: typeof lostItems }) {
-  const [tab, setTab] = useState("Lost");
+export function LostFound({ items }: { items?: LostFoundRow[] }) {
+  const [tab, setTab] = useState<ItemType>(ITEM_TYPES.LOST);
   const [q, setQ] = useState("");
+  const rows = items ?? [];
 
-  // Filter items based on tab and search query
-  const list = items.filter(x =>
-    x.type === tab &&
-    x.name.toLowerCase().includes(q.toLowerCase())
+  // `type` is stored lowercase in Postgres; compare against the DB value, not the label.
+  const list = rows.filter(x =>
+    x.type === tab.toLowerCase() &&
+    (x.name ?? "").toLowerCase().includes(q.trim().toLowerCase())
   );
 
   return (
@@ -396,7 +461,7 @@ function LostFound({ items=[] }:{ items?: typeof lostItems }) {
     >
       <div className="mb-5 flex flex-col gap-3 sm:flex-row">
         <div className="segmented">
-          {["Lost", "Found"].map(x => (
+          {ITEM_STATUS_TAB_ORDER.map(x => (
             <Button
               key={x}
               variant={tab === x ? "default" : "ghost"}
@@ -428,13 +493,13 @@ function LostFound({ items=[] }:{ items?: typeof lostItems }) {
               className="event-card"
               key={x.id}
             >
-              <div className="grid h-44 place-items-center bg-muted text-6xl">
-                {x.icon}
+              <div className="grid h-44 place-items-center bg-muted">
+                <PackageSearch className="size-12 text-muted-foreground" />
               </div>
               <div className="p-5">
                 <div className="flex items-center justify-between">
-                  <StatusBadge status={x.status} />
-                  <span className="text-xs text-muted-foreground">{x.date}</span>
+                  <StatusBadge status={toItemStatusLabel(x.status)} />
+                  <span className="text-xs text-muted-foreground">{formatAnnouncementDate(x.date)}</span>
                 </div>
                 <h2 className="mt-3 font-bold">{x.name}</h2>
                 <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
@@ -500,6 +565,7 @@ function Notifications(){const { notifications, loading, error, markAsRead, mark
                     )}
                   </div>
                 </div>
+              </div>
             ))}
           </>
         )}
@@ -658,11 +724,10 @@ function CreateDialog({kind}:{kind:"announcements"|"events"}) {
           </FormField>
           <FormField label={ev ? "Cover image" : "Attached image (optional)"}>
             <label className="upload-zone flex cursor-pointer flex-col items-center justify-center gap-2 p-6 text-center">
-              {img ? <img src={img} alt="Preview" className="max-h-40 rounded-md object-cover"/> : <>}
+              {img ? <img src={img} alt="Preview" className="max-h-40 rounded-md object-cover"/> : null}
               <ImagePlus className="size-8 text-primary"/>
               <span className="text-sm font-semibold">Click to upload</span>
               <span className="text-xs text-muted-foreground">PNG or JPG, up to 5 MB</span>
-              </>
             </label>
             <input type="file" accept="image/*" className="sr-only" onChange={e => {
               const f = e.target.files?.[0];
@@ -691,8 +756,14 @@ function CreateDialog({kind}:{kind:"announcements"|"events"}) {
     </Dialog>
   );
 }
+type RegistrantRow = {
+  id: string;
+  registered_at: string;
+  student: { full_name: string | null; email: string | null }[] | null;
+};
+
 function Registrants() {
-  const [registrants, setRegistrants] = useState([]);
+  const [registrants, setRegistrants] = useState<RegistrantRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -742,9 +813,29 @@ function Registrants() {
     </AppShell>
   );
 }
-function MyEvents(){return <AppShell role="student" title="My events" subtitle="Review and manage your registrations."><div className="space-y-4">{events.slice(0,2).map((e,i)=><div className="content-card flex flex-col justify-between gap-4 sm:flex-row sm:items-center" key={e.id}><div className="flex items-center gap-4"><span className="grid size-14 place-items-center rounded-md bg-primary-soft text-xs font-bold text-primary">{e.day}</span><div><h2 className="font-bold">{e.title}</h2><p className="mt-1 text-sm text-muted-foreground">{e.date} · {e.location}</p></div></div><div className="flex items-center gap-3"><StatusBadge status={i?"Past":"Upcoming"}/>{!i&&<Button variant="outline" onClick={()=>toast.success("Registration cancelled")}>Cancel registration</Button>}</div></div>)}</div></AppShell>}
+function MyEvents(){const [rows,setRows]=useState<EventRow[]>([]);const [loading,setLoading]=useState(true);const {user}=useUser();useEffect(()=>{if(!user){setLoading(false);return}void (async()=>{try{const {data,error}=await supabase.from("events").select("id, title, description, category, location, start_time, end_time, capacity, cover_image_url, created_by, created_at").eq("created_by",user.id).order("start_time",{ascending:true});if(error)throw error;setRows(data??[])}catch{setRows([])}finally{setLoading(false)}})()},[user]);if(loading)return <AppShell role="student" title="My events" subtitle="Review and manage your registrations."><div className="section-panel p-0 py-8 text-center text-muted-foreground">Loading your events…</div></AppShell>;if(!rows.length)return <AppShell role="student" title="My events" subtitle="Review and manage your registrations." actions={<Button asChild><Link href="/events"><Plus/>Browse events</Link></Button>}><EmptyState title="You're not registered for any events" text="Browse campus events and register for the ones you want to attend."/></AppShell>;return <AppShell role="student" title="My events" subtitle="Review and manage your registrations."><div className="space-y-4">{rows.map((e,i)=>{const startsAt=new Date(e.start_time);const past=startsAt.getTime()<Date.now();return <div className="content-card flex flex-col justify-between gap-4 sm:flex-row sm:items-center" key={e.id}><div className="flex items-center gap-4"><span className="grid size-14 place-items-center rounded-md bg-primary-soft text-xs font-bold text-primary">{startsAt.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span><div><h2 className="font-bold">{e.title}</h2><p className="mt-1 text-sm text-muted-foreground">{startsAt.toLocaleString()} · {e.location}</p></div></div><div className="flex items-center gap-3"><StatusBadge status={past?"Past":"Upcoming"}/>{!past&&<Button variant="outline" onClick={()=>toast.success("Registration cancelled")}>Cancel registration</Button>}</div></div>})}</div></AppShell>}
 function AccessDenied(){return <div className="grid min-h-screen place-items-center bg-app px-5"><div className="max-w-md text-center"><span className="mx-auto grid size-20 place-items-center rounded-full bg-danger-soft text-danger"><LockKeyhole className="size-9"/></span><h1 className="mt-6 text-3xl font-bold">Access denied</h1><p className="mt-3 text-muted-foreground">Your account doesn’t have permission to view this area. Return to your dashboard to continue.</p><Button className="mt-7" asChild><Link href="/dashboard">Back to dashboard</Link></Button></div></div>}
-export function CampusPage({page}:{page:PageKey}) {
- if(page==="forgot")return <ForgotPassword/>; if(page==="login")return <AuthPage/>; if(page==="signup")return <AuthPage signup/>; if(page==="announcements")return <PublicList/>; if(page==="events")return <PublicList eventsPage/>; if(page==="dashboard")return <StudentDashboard/>; if(page==="announcement-detail")return <AnnouncementDetail/>; if(page==="event-detail")return <EventDetail/>; if(page==="my-events")return <MyEvents/>; if(page==="concern-new")return <FormPage/>; if(page==="concern-detail")return <Thread/>; if(page==="lost-new")return <FormPage lost/>; if(page==="lost-found")return <LostFound/>; if(page==="lost-detail")return <LostDetail/>; if(page==="profile")return <Profile/>; if(page==="notifications")return <Notifications/>; if(page==="staff-dashboard")return <StaffDashboard/>; if(page==="staff-concerns")return <AppShell role="staff" title="All concerns" subtitle="Review, update, and respond to student concerns."><Filters search="Search concerns"/><ConcernsTable staff/></AppShell>; if(page==="staff-concern-detail")return <Thread staff/>; if(page==="staff-lost")return <StaffLost/>; if(page==="admin-dashboard")return <AdminDashboard/>; if(page==="admin-announcements")return <AdminList kind="announcements"/>; if(page==="admin-events")return <AdminList kind="events"/>; if(page==="admin-concerns")return <AdminList kind="concerns"/>; if(page==="admin-lost")return <AdminList kind="lost"/>; if(page==="admin-users")return <AdminList kind="users"/>; if(page==="registrants")return <Registrants/>; if(page==="reports")return <AdminDashboard reports/>; if(page==="denied")return <AccessDenied/>; if(page==="concerns")return <AppShell role="student" title="My concerns" subtitle="Track every request from submission to resolution." actions={<Button asChild><Link href="/concerns/new"><Plus/>Submit concern</Link></Button>}><Filters search="Search my concerns"/><ConcernsTable/></AppShell>;
- return <Landing/>;
+/**
+ * Shell configuration for routes that supply their own body via `children`
+ * instead of rendering one of the built-in page components above.
+ */
+const pageShells: Record<string, { role: Role; title: string; subtitle?: string }> = {
+  "concern-new": { role: "student", title: "Submit a concern", subtitle: "Tell us what happened and the right team will follow up." },
+  "concern-detail": { role: "student", title: "Concern", subtitle: "Track this request from submission to resolution." },
+  "lost-new": { role: "student", title: "Report a lost or found item", subtitle: "Help reunite campus items with their owners." },
+  "staff-concern-detail": { role: "staff", title: "Concern", subtitle: "Review, update, and respond to this concern." },
+  "admin-announcements": { role: "admin", title: "Manage announcements", subtitle: "Review and manage announcements across campus." },
+};
+
+export function CampusPage({ page, children }: { page: PageKey; children?: ReactNode }) {
+  if (children !== undefined) {
+    const shell = pageShells[page] ?? { role: "student" as Role, title: "CampusConnect" };
+    return (
+      <AppShell role={shell.role} title={shell.title} {...(shell.subtitle ? { subtitle: shell.subtitle } : {})}>
+        {children}
+      </AppShell>
+    );
+  }
+  if(page==="forgot")return <ForgotPassword/>; if(page==="login")return <AuthPage/>; if(page==="signup")return <AuthPage signup/>; if(page==="announcements")return <PublicList/>; if(page==="events")return <PublicList eventsPage/>; if(page==="dashboard")return <StudentDashboard/>; if(page==="announcement-detail")return <AnnouncementDetail/>; if(page==="event-detail")return <EventDetail/>; if(page==="my-events")return <MyEvents/>; if(page==="concern-new")return <FormPage/>; if(page==="concern-detail")return <Thread/>; if(page==="lost-new")return <FormPage lost/>; if(page==="lost-found")return <LostFound/>; if(page==="lost-detail")return <LostDetail/>; if(page==="profile")return <Profile/>; if(page==="notifications")return <Notifications/>; if(page==="staff-dashboard")return <StaffDashboard/>; if(page==="staff-concerns")return <AppShell role="staff" title="All concerns" subtitle="Review, update, and respond to student concerns."><Filters search="Search concerns"/><ConcernsTable staff/></AppShell>; if(page==="staff-concern-detail")return <Thread staff/>; if(page==="staff-lost")return <StaffLost/>; if(page==="admin-dashboard")return <AdminDashboard/>; if(page==="admin-announcements")return <AdminList kind="announcements"/>; if(page==="admin-events")return <AdminList kind="events"/>; if(page==="admin-concerns")return <AdminList kind="concerns"/>; if(page==="admin-lost")return <AdminList kind="lost"/>; if(page==="admin-users")return <AdminList kind="users"/>; if(page==="registrants")return <Registrants/>; if(page==="reports")return <AdminDashboard reports/>; if(page==="denied")return <AccessDenied/>; if(page==="concerns")return <AppShell role="student" title="My concerns" subtitle="Track every request from submission to resolution." actions={<Button asChild><Link href="/concerns/new"><Plus/>Submit concern</Link></Button>}><Filters search="Search my concerns"/><ConcernsTable/></AppShell>;
+  return <Landing/>;
 }

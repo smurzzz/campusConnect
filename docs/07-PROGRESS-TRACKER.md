@@ -20,8 +20,8 @@ Update the checkboxes as you complete each item. Organized by phase — see `09-
 *Note: bulk CSV import for Campus IDs is a stretch goal, not required for MVP — manual single-entry (or direct database seeding) is sufficient for now.*
 
 ## Phase 1 — Database & RLS (9 items)
-- [ ] `users` table (synced from Clerk)
-- [ ] `announcements` table + RLS policies
+- [ ] `users` table (synced from Clerk) — *the table was `id UUID REFERENCES auth.users(id)`, but auth is Clerk, whose ids are opaque strings, so no row could ever be created. `20260928030000_migrate_users_id_to_clerk_text.sql` converted `users.id` and all eight foreign keys pointing at it to `TEXT` and rewrote the RLS policies to compare against `(auth.jwt() ->> 'sub')`. Applied and verified against the live project 2026-09-28: every converted column accepts a Clerk-style id, and RLS policies must be dropped before the type change or Postgres rejects the ALTER.*
+- [x] `announcements` table + RLS policies — *applied and verified against the live project 2026-09-28: drafts are hidden from the anon key, anon writes are refused, and the status/audience CHECKs reject bad values*
 - [ ] `events` table + RLS policies
 - [ ] `event_registrations` table + RLS policies
 - [ ] `concerns` table + RLS policies
@@ -80,16 +80,20 @@ Update the checkboxes as you complete each item. Organized by phase — see `09-
 - [x] 404 Page Not Found
 - [x] Access Denied
 
-*Note: all 38 screens are implemented on the App Router with deterministic mock data (Phase 3 wiring pending). Routes are grouped as `app/(public)`, `app/(app)` and `app/(auth)`; `/admin/*` is admin-only and `/staff/*` is personnel/admin in `proxy.ts`. `npx tsc --noEmit`, `npm run lint` and `npm run build` all pass.*
+*Note: all 38 screens are implemented on the App Router. Routes are grouped as `app/(public)`, `app/(app)` and `app/(auth)`; `/admin/*` is admin-only and `/staff/*` is personnel/admin in `proxy.ts`. Announcements is wired to Supabase (see Phase 3); the remaining modules still use deterministic mock data.*
+
+*Build status: `npx tsc --noEmit` and `npm run build` pass. `npm run lint` reports 58 errors, all pre-existing `react-hooks` React Compiler violations (`immutability`, `set-state-in-effect`, `refs`) and `no-explicit-any` in the mock-data modules, plus unused imports in `lib/actions.ts` and `src/middleware.ts`.*
+
+*Page structure: any page that needs browser state is split into a server `page.tsx` (which owns `export const metadata`) and a colocated `*-client.tsx` with `"use client"`. `metadata` cannot be exported from a client module, and a server module cannot import `useState`/`useEffect`, so neither can live in one file.*
 
 ## Phase 3 — Backend Logic / Functionality (8 items)
-- [ ] Auth: sign up, log in, log out, role assignment, protected routing (email/password, Google, Campus ID)
-- [ ] Announcements: full CRUD, publish/draft toggle, category filter, search
+- [ ] Auth: sign up, log in, log out, role assignment, protected routing (email/password, Google, Campus ID) — *the Clerk webhook only handled `user.updated` and `user.deleted`, with no `user.created` branch, so `public.users` was never populated. It now upserts on both events through a service-role client, which is required because `public.users` has no INSERT or DELETE policy.*
+- [x] Announcements: full CRUD, publish/draft toggle, category filter, search — *verified live 2026-09-28*
 - [ ] Events: full CRUD, registration with capacity enforcement, cancellation, registrant export
 - [ ] Concerns: submission with attachment, threaded replies, status updates, assignment to personnel
 - [ ] Lost & Found: report with photo upload, status updates (open/claimed), search/filter by type
-- [ ] Notifications: triggers on announcement/event/concern events, mark as read, realtime badge update
-- [ ] User management: role changes, deactivation, Campus ID seeding
+- [ ] Notifications: triggers on announcement/event/concern events, mark as read, realtime badge update — *all five trigger functions were inserting into `notifications.title`/`.body`, which do not exist; fixed in `20260928020000_fix_notification_trigger_columns.sql` (the live column is `message`). The publish trigger also compared `uuid <> text` across `users.id`/`announcements.created_by`, fixed in `20260928010000`. Both applied, and the announcement path verified end-to-end 2026-09-28: publishing notified every non-author user with a populated `message`, and a draft produced no notification. The event, concern, and lost-and-found triggers are still unverified.*
+- [ ] User management: role changes, deactivation, Campus ID seeding — *role changes and deactivation now go through admin-checked API routes. The `public.users.status` column these depend on did not exist and was added in `20260928040000_add_users_status.sql`. Status is a soft flag: it does not block Clerk sign-in.*
 - [ ] Reports: aggregated queries for charts (concerns by status, events by attendance, lost & found resolution rate), CSV/PDF export
 
 ## Phase 4 — Testing (5 items)
@@ -113,7 +117,7 @@ Update the checkboxes as you complete each item. Organized by phase — see `09-
 | Setup | 13 | 7 | 54% |
 | Database & RLS | 9 | 0 | 0% |
 | Frontend Screens | 38 | 38 | 100% |
-| Backend Logic | 8 | 0 | 0% |
+| Backend Logic | 8 | 1 | 13% |
 | Testing | 5 | 0 | 0% |
 | Deployment | 6 | 0 | 0% |
 

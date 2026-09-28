@@ -129,6 +129,27 @@ In addition to email/password and Google OAuth, students can log in using a **Ca
 4. On success, a `notifications` row is created (trigger or app-level call) for relevant personnel.
 5. UI updates optimistically, then confirms via the Supabase response; a toast confirms submission.
 
+## 6a. Announcements (the reference CRUD implementation)
+
+Announcements are the first module wired to real data, and set the pattern the rest of the
+app should follow.
+
+**Layers**
+| File | Responsibility |
+|---|---|
+| `lib/announcements.ts` | All queries and mutations. Exact column lists, no `select('*')`. Returns both data and a human-readable error string. |
+| `lib/hooks/use-announcements.ts` | Binds a Supabase client to the Clerk session token and exposes `useAnnouncements` / `useAnnouncement` / `useAnnouncementMutations`. |
+| `components/announcements/*` | Presentational list, detail view, and the admin manager (create/edit/delete/publish). |
+| `app/(public)/announcements/**` | Guest + student surface. `page.tsx` is a server component; `announcement-list.tsx` is the client boundary. |
+| `app/(app)/admin/announcements/page.tsx` | Admin surface, rendered behind the `useRole()` check. |
+
+**Rules that matter here**
+- **Failing closed.** `listAnnouncements` treats an absent `publishedOnly: false` as `published`. Drafts can only be reached by explicitly opting in, and that opt-in is additionally gated on the role being `admin`.
+- **The session token is the authority.** Reads and writes go through `createAuthedSupabaseClient(getToken)`, so RLS evaluates the real Clerk JWT. The client-side role check is UX only; the database is what enforces access.
+- **Authorship is not a form field.** `created_by` is written from `user.id` and RLS asserts `created_by = auth.jwt() ->> 'sub'`, so an edit cannot reassign authorship. The column is `TEXT` (Clerk ids like `user_2abc...`), not the `UUID` used by `public.users.id`.
+- **Vocabulary is locked in the database.** `status` is `published`/`draft` and `audience` is `Everyone`/`Students only`/`Personnel only`, enforced by CHECK constraints that mirror `lib/constants/categories.ts` and `lib/constants/statuses.ts`. Update both together.
+- **Search is escaped.** ILIKE metacharacters (`%`, `_`, `\`) are escaped before the term reaches PostgREST, so searching `100%` doesn't match everything.
+
 ## 7. Notifications Flow
 - **In-app:** a Postgres trigger inserts into `notifications` on relevant events (new announcement, concern status change, event reminder). A Supabase Realtime subscription updates the bell icon/badge live, with no page refresh.
 - **Email (optional/stretch):** a Next.js API route calls Resend when a notification of type `email_worthy` is created.

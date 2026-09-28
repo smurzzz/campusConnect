@@ -27,6 +27,36 @@ export const PUBLICATION_STATUS_TONES: Record<PublicationStatus, StatusTone> = {
   [PUBLICATION_STATUSES.DRAFT]: "neutral",
 };
 
+/**
+ * `announcements.status` is stored lowercase because that is what the RLS
+ * policies and the column default compare against. The UI speaks Title Case,
+ * so every read maps through here rather than trusting the raw column.
+ */
+export const PUBLICATION_DB_VALUES = {
+  PUBLISHED: "published",
+  DRAFT: "draft",
+} as const;
+export type PublicationDbValue = (typeof PUBLICATION_DB_VALUES)[keyof typeof PUBLICATION_DB_VALUES];
+export const PUBLICATION_DB_VALUE_LIST: PublicationDbValue[] = [
+  PUBLICATION_DB_VALUES.PUBLISHED,
+  PUBLICATION_DB_VALUES.DRAFT,
+];
+
+const PUBLICATION_LABELS: Record<PublicationDbValue, PublicationStatus> = {
+  [PUBLICATION_DB_VALUES.PUBLISHED]: PUBLICATION_STATUSES.PUBLISHED,
+  [PUBLICATION_DB_VALUES.DRAFT]: PUBLICATION_STATUSES.DRAFT,
+};
+
+export function toPublicationLabel(value: string | null | undefined): PublicationStatus {
+  return PUBLICATION_LABELS[value as PublicationDbValue] ?? PUBLICATION_STATUSES.DRAFT;
+}
+
+export function toPublicationDbValue(status: PublicationStatus): PublicationDbValue {
+  return status === PUBLICATION_STATUSES.PUBLISHED
+    ? PUBLICATION_DB_VALUES.PUBLISHED
+    : PUBLICATION_DB_VALUES.DRAFT;
+}
+
 export const ITEM_STATUSES = {
   OPEN: "Open",
   CLAIMED: "Claimed",
@@ -81,3 +111,33 @@ export type ReportKind = (typeof REPORT_KINDS)[keyof typeof REPORT_KINDS];
 
 /** "All …" option shared by select filters. */
 export const ALL_OPTION = "All";
+
+/**
+ * Single status -> tone lookup for the shared `StatusBadge`. Individual
+ * modules still own their exact vocabularies above; this only answers
+ * "which colour should this chip be" for whichever value arrives.
+ */
+const STATUS_TONES: Record<string, StatusTone> = {
+  // Concerns
+  Pending: "warning",
+  "In Progress": "warning",
+  Resolved: "success",
+  Urgent: "danger",
+  // Announcements
+  Published: "success",
+  Draft: "neutral",
+  // Lost & found
+  Open: "success",
+  Claimed: "neutral",
+  // Events
+  Upcoming: "warning",
+  Past: "neutral",
+  // Accounts
+  Active: "success",
+  Deactivated: "danger",
+};
+
+export function statusTone(status: string): StatusTone {
+  return STATUS_TONES[status] ?? "neutral";
+}
+
