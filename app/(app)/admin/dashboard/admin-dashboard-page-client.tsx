@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { AdminDashboard, CampusPage } from "@/components/campus-page";
+import { AdminDashboard } from "@/components/campus-page";
 import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
 
 export default function AdminDashboardPage() {
@@ -57,13 +57,9 @@ export default function AdminDashboardPage() {
     })();
   }, [client]);
 
+  // AdminDashboard owns its AppShell — render it directly (wrapping it in
+  // <CampusPage> would stack a second sidebar/header on top of its own).
   return (
-    <CampusPage page="admin-dashboard">
-      {loading ? null : error ? (
-        <div className="rounded-md bg-danger-soft p-4 text-sm text-danger">{error}</div>
-      ) : (
-        <AdminDashboard stats={stats} />
-      )}
-    </CampusPage>
+    <AdminDashboard stats={stats} loading={loading} error={error} />
   );
 }

@@ -42,9 +42,7 @@ export default function LostFoundPage() {
     );
   }
 
-  return (
-    <CampusPage page="lost-found">
-      <LostFound items={items} />
-    </CampusPage>
-  );
+  // LostFound picks its own shell (public vs. signed-in via Frame) — render
+  // it directly; a <CampusPage> wrapper would stack a second shell inside it.
+  return <LostFound items={items} />;
 }

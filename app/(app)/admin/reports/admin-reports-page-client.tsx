@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
 import { toast } from "sonner";
 
-import { AdminDashboard, CampusPage } from "@/components/campus-page";
-import { Button } from "@/components/ui/button";
+import { AdminDashboard } from "@/components/campus-page";
 import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
 
 /** Bucket shape the report charts render. */
@@ -124,34 +122,23 @@ export default function AdminReportsPage() {
     toast.success("Report exported as CSV");
   };
 
+  // AdminDashboard owns its AppShell and the export button (via `onExport`) —
+  // render it directly; a <CampusPage> wrapper would stack a second shell.
   return (
-    <CampusPage page="reports">
-      {loading ? (
-        <div className="section-panel p-0 text-center py-8 text-muted-foreground">Loading reports…</div>
-      ) : error ? (
-        <div className="rounded-md bg-danger-soft p-4 text-sm text-danger">{error}</div>
-      ) : (
-        <>
-          <div className="mb-6 flex justify-end">
-            <Button onClick={exportCsv}>
-              <Download />
-              Export CSV
-            </Button>
-          </div>
-          <AdminDashboard
-            reports
-            stats={{
-              totalUsers: concernsByStatus.reduce((sum, b) => sum + b.count, 0),
-              activeConcerns: (concernsByStatus.find((b) => b.status === "Pending")?.count ?? 0) + (concernsByStatus.find((b) => b.status === "In Progress")?.count ?? 0),
-              upcomingEvents: eventsAttendance.length,
-              openItems: lostFoundResolution.find((b) => b.status === "Reported")?.count ?? 0,
-            }}
-            concernsByStatus={concernsByStatus}
-            eventsAttendance={eventsAttendance.map((e) => ({ title: e.title, capacity: e.capacity ?? 0, event_registrations: [{ count: e.registration_count }] }))}
-            lostFoundResolution={lostFoundResolution}
-          />
-        </>
-      )}
-    </CampusPage>
+    <AdminDashboard
+      reports
+      loading={loading}
+      error={error}
+      onExport={exportCsv}
+      stats={{
+        totalUsers: concernsByStatus.reduce((sum, b) => sum + b.count, 0),
+        activeConcerns: (concernsByStatus.find((b) => b.status === "Pending")?.count ?? 0) + (concernsByStatus.find((b) => b.status === "In Progress")?.count ?? 0),
+        upcomingEvents: eventsAttendance.length,
+        openItems: lostFoundResolution.find((b) => b.status === "Reported")?.count ?? 0,
+      }}
+      concernsByStatus={concernsByStatus}
+      eventsAttendance={eventsAttendance.map((e) => ({ title: e.title, capacity: e.capacity ?? 0, event_registrations: [{ count: e.registration_count }] }))}
+      lostFoundResolution={lostFoundResolution}
+    />
   );
 }

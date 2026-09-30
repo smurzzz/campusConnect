@@ -199,8 +199,16 @@ export function ManagementTable({kind, data}:{kind:"announcements"|"events"|"los
   return <div className="table-shell">{rows.map((r,i)=>{ const [name = "", detail = "", date = "", status = "Open"]: string[] = r; return <div key={i} className="data-grid-row md:grid-cols-[1.8fr_1fr_1fr_1fr_auto]"><div className="flex items-center gap-3">{kind==="users"&&<span className="grid size-9 place-items-center rounded-full bg-primary-soft font-semibold text-primary">{name.split(" ").map((x: string)=>x.charAt(0)).join("")}</span>}<span className="font-semibold">{name}</span></div><div>{detail}</div><div>{date}</div><div><StatusBadge status={status}/></div><div className="flex gap-1">{kind==="users"?<ChangeRoleDialog name={name} currentRole={date}/>:<Button variant="ghost" size="icon" aria-label={`Edit ${name}`} onClick={()=>toast("Edit panel opened")}><Pencil/></Button>}<Button variant="ghost" size="icon" aria-label={`More options for ${name}`} onClick={()=>toast("More actions opened")}><MoreHorizontal/></Button></div></div>})}</div>;
 }
 function MiniChart({type="bar"}:{type?:"bar"|"line"|"donut"}) { const vals=[42,64,48,76,58,88,72]; return <div className="mt-5 flex h-44 items-end gap-3 border-b border-border px-2 pb-0">{type==="donut"?<div className="mx-auto mb-5 grid size-36 place-items-center rounded-full bg-chart-ring"><div className="grid size-20 place-items-center rounded-full bg-card text-center"><span><strong className="block text-2xl">78%</strong><small className="text-muted-foreground">resolved</small></span></div></div>:vals.map((v,i)=><div key={i} className="flex h-full flex-1 items-end"><span className={cn("w-full rounded-t-sm",type==="line"?"bg-accent":"bg-primary/75")} style={{height:`${v}%`}}/></div>)}</div>; }
-export function AdminDashboard({reports=false, stats, concernsByStatus, eventsAttendance, lostFoundResolution}:{reports?:boolean; stats?:{totalUsers:number; activeConcerns:number; upcomingEvents:number; openItems:number}; concernsByStatus?:Array<{status:string; count:number}>; eventsAttendance?:Array<{title:string; capacity:number; event_registrations:Array<{count:number}>}>; lostFoundResolution?:Array<{status:string; count:number}>}) {
-  return <AppShell role="admin" title={reports?"Reports & insights":"Good afternoon, Dr. Lim"} subtitle={reports?"Understand service performance across the campus.":"Here’s what’s happening across CampusConnect today."} actions={reports?<Button onClick={()=>toast.success("Report export started")}><Download/>Export CSV/PDF</Button>:undefined}>
+//
+// `AdminDashboard` owns its AppShell: it must be rendered directly, never as
+// a child of <CampusPage>, or the page ends up with two stacked sidebars.
+export function AdminDashboard({reports=false, stats, loading=false, error, onExport, concernsByStatus, eventsAttendance, lostFoundResolution}:{reports?:boolean; stats?:{totalUsers:number; activeConcerns:number; upcomingEvents:number; openItems:number}; loading?:boolean; error?:string|null; onExport?:()=>void; concernsByStatus?:Array<{status:string; count:number}>; eventsAttendance?:Array<{title:string; capacity:number; event_registrations:Array<{count:number}>}>; lostFoundResolution?:Array<{status:string; count:number}>}) {
+  const { user } = useUser();
+  const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Welcome";
+  const greeting = `Good day, ${displayName.split(" ")[0]}`;
+  if (loading) return <AppShell role="admin" title={reports?"Reports & insights":greeting} subtitle={reports?"Preparing your campus insights…":"Here’s what’s happening across CampusConnect today."}><div className="section-panel p-0 py-8 text-center text-muted-foreground">Loading…</div></AppShell>;
+  if (error) return <AppShell role="admin" title={reports?"Reports & insights":greeting} subtitle={reports?"Something went wrong while loading your insights.":"Here’s what’s happening across CampusConnect today."}><div className="rounded-md bg-danger-soft p-4 text-sm text-danger">{error}</div></AppShell>;
+  return <AppShell role="admin" title={reports?"Reports & insights":greeting} subtitle={reports?"Understand service performance across the campus.":"Here’s what’s happening across CampusConnect today."} actions={reports&&onExport?<Button onClick={onExport}><Download/>Export CSV/PDF</Button>:undefined}>
     <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard label={reports?"Concerns resolved":"Total users"} value={stats?.totalUsers ?? 0} icon={UsersRound} trend="8.4% this month"/>
       <StatCard label="Active concerns" value={stats?.activeConcerns ?? 0} icon={MessageSquareText}/>
@@ -842,6 +850,12 @@ const pageShells: Record<string, { role: Role; title: string; subtitle?: string 
   "admin-announcements": { role: "admin", title: "Manage announcements", subtitle: "Review and manage announcements across campus." },
 };
 
+/**
+ * Shell switch. With `children`, this renders an AppShell around the given
+ * content — children MUST be shell-free (no AppShell/Frame of their own), or
+ * the page stacks two sidebars. Components that own a shell (AdminDashboard,
+ * LostFound, StudentDashboard, …) are rendered directly by their pages.
+ */
 export function CampusPage({ page, children }: { page: PageKey; children?: ReactNode }) {
   if (children !== undefined) {
     const shell = pageShells[page] ?? { role: "student" as Role, title: "CampusConnect" };
