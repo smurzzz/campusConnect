@@ -7,6 +7,7 @@ import { toast } from "sonner";
 
 import { EmptyState } from "@/components/campus-page";
 import { Button } from "@/components/ui/button";
+import { ImageFilePicker } from "@/components/ui/image-file-picker";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,6 +32,8 @@ import {
 import { useUser } from "@clerk/nextjs";
 import type { EventDraft, EventRow } from "@/lib/events";
 import { useEventMutations, useEvents } from "@/lib/hooks/use-events";
+import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
+import { uploadCmsImage } from "@/lib/cms";
 import { EVENT_CATEGORIES, CAMPUS_LOCATIONS, type EventCategory } from "@/lib/constants/categories";
 import { ALL_OPTION } from "@/lib/constants/statuses";
 
@@ -129,11 +132,14 @@ type EditorDialogProps = {
   pending: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (draft: EventDraft) => void;
+  /** Uploads a picked image and resolves to its public URL. */
+  uploadCover: (file: File) => Promise<{ url: string | null; error: string | null }>;
 };
 
-function EditorDialog({ open, editing, pending, onOpenChange, onSubmit }: EditorDialogProps) {
+function EditorDialog({ open, editing, pending, onOpenChange, onSubmit, uploadCover }: EditorDialogProps) {
   const [form, setForm] = useState<FormState>(() => (editing ? toFormState(editing) : emptyForm()));
   const [problem, setProblem] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   // Re-seed the form whenever the dialog opens for a different row.
   const seed = editing?.id ?? "new";
@@ -246,18 +252,38 @@ function EditorDialog({ open, editing, pending, onOpenChange, onSubmit }: Editor
               />
             </label>
 
-            <label className="block">
-              <span className="mb-1.5 block text-sm font-medium">
-                Cover image URL <span className="font-normal text-muted-foreground">(optional)</span>
-              </span>
-              <Input
-                value={form.coverImageUrl}
-                onChange={(event) => update("coverImageUrl", event.target.value)}
-                placeholder="https://…"
-              />
-            </label>
           </div>
 
+          <ImageFilePicker
+            label="Cover image (optional)"
+            note="PNG, JPG or WEBP up to 10 MB — take a photo or pick from your gallery"
+            accept="image/png,image/jpeg,image/webp"
+            existingUrl={form.coverImageUrl || null}
+            onFileSelected={
+              uploading
+                ? undefined
+                : (file) => {
+                    if (!file) {
+                      update("coverImageUrl", "");
+                      return;
+                    }
+                    void (async () => {
+                      setUploading(true);
+                      setProblem(null);
+                      const { url, error } = await uploadCover(file);
+                      setUploading(false);
+                      if (error || !url) {
+                        setProblem(error ?? "Image upload failed.");
+                        return;
+                      }
+                      update("coverImageUrl", url);
+                      toast.success("Cover image uploaded");
+                    })();
+                  }
+            }
+          />
+
+          {uploading && <p className="text-sm text-muted-foreground">Uploading image…</p>}
           {problem && <p className="text-sm text-danger">{problem}</p>}
         </div>
 
@@ -290,6 +316,7 @@ function EditorDialog({ open, editing, pending, onOpenChange, onSubmit }: Editor
  * Supabase client, so every change is authorised by the RLS policies.
  */
 export function EventManager() {
+  const client = useSupabaseClient();
   const { user } = useUser();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>(ALL_OPTION);
@@ -514,6 +541,7 @@ export function EventManager() {
         pending={pending}
         onOpenChange={setEditorOpen}
         onSubmit={(draft) => void handleSubmit(draft)}
+        uploadCover={(file) => uploadCmsImage(client, user?.id ?? "", file)}
       />
 
       <AlertDialog

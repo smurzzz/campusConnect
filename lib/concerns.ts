@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ConcernCategory } from "@/lib/constants/categories";
+import { downscaleImage } from "@/lib/image-utils";
 import type { Database } from "@/lib/supabase";
 
 type Tables = Database["public"]["Tables"];
@@ -297,12 +298,14 @@ export async function uploadConcernAttachment(
   ownerId: string,
   file: File,
 ): Promise<{ url: string | null; error: string | null }> {
-  const safeName = file.name.replace(/[^\w.\-]+/g, "-");
+  // Images are normalised to 1080p-class before upload; PDFs pass through.
+  const uploadable = await downscaleImage(file);
+  const safeName = uploadable.name.replace(/[^\w.\-]+/g, "-");
   const path = `${ownerId}/${Date.now()}-${safeName}`;
 
   const { error: uploadError } = await client.storage
     .from("concern-attachments")
-    .upload(path, file, { upsert: false });
+    .upload(path, uploadable, { upsert: false });
 
   if (uploadError) return { url: null, error: uploadError.message };
 

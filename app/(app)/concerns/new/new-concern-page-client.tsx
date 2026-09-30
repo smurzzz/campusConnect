@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { CampusPage } from "@/components/campus-page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ImageFilePicker } from "@/components/ui/image-file-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { concernSchema } from "@/lib/validators";
@@ -125,18 +126,12 @@ export default function NewConcernPage() {
           {errors.description && <p className="text-sm text-destructive">{errors.description.message}</p>}
         </div>
 
-        <div className="border-t pt-4">
-          <Label htmlFor="attachment">Attachment (optional)</Label>
-          <p className="mb-2 text-xs text-muted-foreground">PNG, JPG, WEBP or PDF up to 10 MB</p>
-          <input
-            type="file"
-            id="attachment"
-            accept=".png,.jpg,.jpeg,.webp,.pdf"
-            className="block w-full border border-input bg-background text-sm text-muted-foreground hover:border-primary/20"
-            {...register("attachment")}
-          />
-          {errors.attachment && <p className="text-sm text-destructive">{errors.attachment.message}</p>}
-        </div>
+        <ImageFilePicker
+          label="Attachment (optional)"
+          note="PNG, JPG, WEBP or PDF up to 10 MB — use your camera or pick from your gallery"
+          registerProps={register("attachment")}
+          error={errors.attachment?.message}
+        />
 
         <div className="flex justify-end pt-4">
           <Button type="submit" disabled={isSubmitting} className="w-[200px]">

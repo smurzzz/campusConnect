@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { CampusPage } from "@/components/campus-page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ImageFilePicker } from "@/components/ui/image-file-picker";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { lostFoundSchema } from "@/lib/validators";
@@ -24,7 +25,6 @@ export default function NewLostFoundPage() {
   const { user } = useUser();
   const [error, setError] = useState<string | null>(null);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
-  const [photoName, setPhotoName] = useState<string | null>(null);
   const {
     register,
     handleSubmit,
@@ -71,7 +71,6 @@ export default function NewLostFoundPage() {
       if (!result.ok || !result.id) throw new Error(result.error ?? "Failed to submit item");
 
       setSubmittedId(result.id);
-      setPhotoName(null);
       reset();
       toast.success("Item reported successfully!");
     } catch (err) {
@@ -156,20 +155,13 @@ export default function NewLostFoundPage() {
           {errors.description && <p className="text-sm text-destructive">{errors.description.message}</p>}
         </div>
 
-        <div className="border-t pt-4">
-          <Label htmlFor="photo">Photo (optional)</Label>
-          <p className="mb-2 text-xs text-muted-foreground">PNG, JPG or WEBP up to 10 MB</p>
-          <input
-            type="file"
-            id="photo"
-            accept=".png,.jpg,.jpeg,.webp"
-            className="block w-full border border-input bg-background text-sm text-muted-foreground hover:border-primary/20"
-            {...register("attachment")}
-            onChange={(event) => setPhotoName(event.target.files?.[0]?.name ?? null)}
-          />
-          {errors.attachment && <p className="text-sm text-destructive">{errors.attachment.message}</p>}
-          {photoName && <p className="mt-1 text-xs text-muted-foreground">Selected: {photoName}</p>}
-        </div>
+        <ImageFilePicker
+          label="Photo (optional)"
+          note="PNG, JPG or WEBP up to 10 MB — use your camera or pick from your gallery"
+          accept="image/png,image/jpeg,image/webp"
+          registerProps={register("attachment")}
+          error={errors.attachment?.message}
+        />
 
         <div className="flex justify-end pt-4">
           <Button type="submit" disabled={isSubmitting} className="w-[200px]">

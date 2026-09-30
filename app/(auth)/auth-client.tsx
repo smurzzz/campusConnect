@@ -139,7 +139,17 @@ function AuthCard({ children }: { children: ReactNode }) {
         <Brand />
       </div>
       <div className="flex flex-1 items-center justify-center px-5 py-12">
-        <div className="auth-card animate-rise w-full max-w-md">{children}</div>
+        <div className="auth-card animate-rise w-full max-w-md">
+          {children}
+          {/*
+            Mount point for Clerk's bot-sign-up protection (enabled by default).
+            Without it Clerk cannot render its Smart CAPTCHA and falls back to
+            the invisible widget with a console error; in "managed" mode the
+            visible challenge renders here. Must exist before signUp.create()
+            or the OAuth sso() call runs — this shared card guarantees that.
+          */}
+          <div id="clerk-captcha" />
+        </div>
       </div>
     </div>
   );

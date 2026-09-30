@@ -7,9 +7,11 @@ import { toast } from "sonner";
 
 import { EmptyState, StatusBadge } from "@/components/campus-page";
 import { Button } from "@/components/ui/button";
+import { ImageFilePicker } from "@/components/ui/image-file-picker";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useUser } from "@clerk/nextjs";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +31,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { AnnouncementDraft, AnnouncementRow } from "@/lib/announcements";
+import { uploadCmsImage } from "@/lib/cms";
 import {
   ANNOUNCEMENT_AUDIENCES,
   ANNOUNCEMENT_CATEGORIES,
@@ -43,6 +46,7 @@ import {
   type PublicationStatus,
 } from "@/lib/constants/statuses";
 import { useAnnouncementMutations, useAnnouncements } from "@/lib/hooks/use-announcements";
+import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
 
 const CATEGORY_OPTIONS = [ALL_OPTION, ...ANNOUNCEMENT_CATEGORIES] as const;
 // No `ALL_OPTION` here: the vocabulary already contains "Everyone", so adding
@@ -112,11 +116,14 @@ type EditorDialogProps = {
   pending: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (draft: AnnouncementDraft) => void;
+  /** Uploads a picked image and resolves to its public URL. */
+  uploadCover: (file: File) => Promise<{ url: string | null; error: string | null }>;
 };
 
-function EditorDialog({ open, editing, pending, onOpenChange, onSubmit }: EditorDialogProps) {
+function EditorDialog({ open, editing, pending, onOpenChange, onSubmit, uploadCover }: EditorDialogProps) {
   const [form, setForm] = useState<FormState>(() => (editing ? toFormState(editing) : emptyForm()));
   const [problem, setProblem] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   // Re-seed the form whenever the dialog opens for a different row.
   const seed = editing?.id ?? "new";
@@ -202,16 +209,34 @@ function EditorDialog({ open, editing, pending, onOpenChange, onSubmit }: Editor
             </label>
           </div>
 
-          <label className="block">
-            <span className="mb-1.5 block text-sm font-medium">
-              Cover image URL <span className="font-normal text-muted-foreground">(optional)</span>
-            </span>
-            <Input
-              value={form.imageUrl}
-              onChange={(event) => update("imageUrl", event.target.value)}
-              placeholder="https://…"
-            />
-          </label>
+          <ImageFilePicker
+            label="Cover image (optional)"
+            note="PNG, JPG or WEBP up to 10 MB — take a photo or pick from your gallery"
+            accept="image/png,image/jpeg,image/webp"
+            existingUrl={form.imageUrl || null}
+            onFileSelected={
+              uploading
+                ? undefined
+                : (file) => {
+                    if (!file) {
+                      update("imageUrl", "");
+                      return;
+                    }
+                    void (async () => {
+                      setUploading(true);
+                      setProblem(null);
+                      const { url, error } = await uploadCover(file);
+                      setUploading(false);
+                      if (error || !url) {
+                        setProblem(error ?? "Image upload failed.");
+                        return;
+                      }
+                      update("imageUrl", url);
+                      toast.success("Cover image uploaded");
+                    })();
+                  }
+            }
+          />
 
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium">Publication state</span>
@@ -228,6 +253,7 @@ function EditorDialog({ open, editing, pending, onOpenChange, onSubmit }: Editor
             </select>
           </label>
 
+          {uploading && <p className="text-sm text-muted-foreground">Uploading image…</p>}
           {problem && <p className="text-sm text-danger">{problem}</p>}
         </div>
 
@@ -260,6 +286,8 @@ function EditorDialog({ open, editing, pending, onOpenChange, onSubmit }: Editor
  * check alone.
  */
 export function AnnouncementManager() {
+  const client = useSupabaseClient();
+  const { user } = useUser();
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>(ALL_OPTION);
   const [status, setStatus] = useState<PublicationStatus | typeof ALL_OPTION>(ALL_OPTION);
@@ -282,6 +310,11 @@ export function AnnouncementManager() {
     setter(value);
     setPage(0);
   };
+
+  // Cover uploads go to the cms-images bucket under the admin's Clerk-id
+  // folder (RLS `cms_images_write_own`), and the resulting public URL lands
+  // in the announcement's `image_url` column.
+  const uploadCover = async (file: File) => uploadCmsImage(client, user?.id ?? "", file);
 
   const openCreate = () => {
     setEditing(null);
@@ -524,6 +557,7 @@ export function AnnouncementManager() {
       )}
 
       <EditorDialog
+        uploadCover={uploadCover}
         open={editorOpen}
         editing={editing}
         pending={pending}

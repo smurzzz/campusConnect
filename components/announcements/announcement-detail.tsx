@@ -82,9 +82,18 @@ export function AnnouncementDetail({ id }: { id: string }) {
           </span>
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-md bg-event-blue p-10 text-center">
-          <BookOpen className="mx-auto size-16 text-primary" />
-        </div>
+        {announcement.image_url ? (
+          // eslint-disable-next-line @next/next/no-img-element -- user-uploaded CMS image from Supabase Storage, not a Next-optimized local asset
+          <img
+            src={announcement.image_url}
+            alt={announcement.title}
+            className="mt-6 max-h-96 w-full rounded-md object-cover"
+          />
+        ) : (
+          <div className="mt-6 overflow-hidden rounded-md bg-event-blue p-10 text-center">
+            <BookOpen className="mx-auto size-16 text-primary" />
+          </div>
+        )}
 
         <div className="prose-copy whitespace-pre-line">{announcement.body}</div>
       </article>

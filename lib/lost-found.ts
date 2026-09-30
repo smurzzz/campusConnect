@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { downscaleImage } from "@/lib/image-utils";
 import type { Database } from "@/lib/supabase";
 
 type Tables = Database["public"]["Tables"];
@@ -79,12 +80,14 @@ export async function uploadLostFoundPhoto(
   ownerId: string,
   file: File,
 ): Promise<{ url: string | null; error: string | null }> {
-  const safeName = file.name.replace(/[^\w.\-]+/g, "-");
+  // Photos are normalised to 1080p-class before upload.
+  const uploadable = await downscaleImage(file);
+  const safeName = uploadable.name.replace(/[^\w.\-]+/g, "-");
   const path = `${ownerId}/${Date.now()}-${safeName}`;
 
   const { error: uploadError } = await client.storage
     .from("lost-found-attachments")
-    .upload(path, file, { upsert: false });
+    .upload(path, uploadable, { upsert: false });
 
   if (uploadError) return { url: null, error: uploadError.message };
 

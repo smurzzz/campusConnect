@@ -2,7 +2,7 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { isRole, type Role } from "@/lib/constants/roles";
-import { loginRoute, ROLE_GUARDED_PREFIXES, ROUTES } from "@/lib/constants/routes";
+import { dashboardRouteForRole, loginRoute, ROLE_GUARDED_PREFIXES, ROUTES } from "@/lib/constants/routes";
 
 /** Routes that always require a session (student, staff and admin areas). */
 const SIGNED_IN_ROUTES = [
@@ -28,6 +28,21 @@ function requiredRoles(pathname: string): readonly Role[] | null {
 
 export default clerkMiddleware(async (auth, request: NextRequest) => {
   const pathname = request.nextUrl.pathname;
+
+  // The marketing landing page is guest-only real estate: a signed-in member
+  // clicking the logo would otherwise land on a page full of "Log in" buttons,
+  // which reads exactly like being logged out. Send them to their portal.
+  if (pathname === "/") {
+    const { isAuthenticated, sessionClaims } = await auth();
+    if (isAuthenticated) {
+      const role = (sessionClaims as { publicMetadata?: { role?: unknown } } | null)
+        ?.publicMetadata?.role;
+      const dashboard = dashboardRouteForRole(isRole(role) ? role : null);
+      return NextResponse.redirect(new URL(dashboard, request.url));
+    }
+    return NextResponse.next();
+  }
+
   const required = requiredRoles(pathname);
 
   if (!required && !isSignedInRoute(pathname)) {
