@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { CalendarDays } from "lucide-react";
 
-import { CampusPage, EmptyState, EventCards } from "@/components/campus-page";
+import { EmptyState, EventCards } from "@/components/campus-page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -33,8 +33,11 @@ export default function EventsPage() {
     setPage(0);
   };
 
+  // The server page wraps this in PublicPage (guest shell / member AppShell),
+  // so this renders its content only — a CampusPage wrapper here would stack
+  // a second shell.
   return (
-    <CampusPage page="events">
+    <>
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="relative min-w-56 flex-1">
           <Input
@@ -100,6 +103,6 @@ export default function EventsPage() {
           View My Events
         </Link>
       </p>
-    </CampusPage>
+    </>
   );
 }
