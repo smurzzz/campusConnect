@@ -1,6 +1,6 @@
 import { Webhook } from 'svix'
 import { headers } from 'next/headers'
-import type { WebhookEvent } from '@clerk/nextjs/server'
+import { clerkClient, type WebhookEvent } from '@clerk/nextjs/server'
 import { createSupabaseAdminClient } from '@/lib/supabase-admin'
 
 export async function POST(req: Request) {
@@ -35,13 +35,18 @@ export async function POST(req: Request) {
 
   let evt: WebhookEvent
 
-  // Verify the webhook
+  // Verify the webhook.
+  //
+  // NB: svix 2.x verifies the signature but returns `undefined` even on
+  // success (it calls the underlying verifier with `jsonParse: false`), so
+  // the verified body is parsed here rather than trusted from `verify()`.
   try {
-    evt = wh.verify(body, {
+    wh.verify(body, {
       "svix-id": svix_id,
       "svix-timestamp": svix_timestamp,
       "svix-signature": svix_signature,
-    }) as unknown as WebhookEvent
+    })
+    evt = JSON.parse(body) as unknown as WebhookEvent
   } catch (err) {
     console.error('Error verifying webhook:', err);
     return new Response('Error: Verification failed', {
@@ -78,6 +83,31 @@ export async function POST(req: Request) {
     }
 
     const clerkRole = userData.public_metadata?.role;
+    // New accounts carry no `publicMetadata.role` yet (the sign-up resource
+    // rejects unknown publicMetadata, so the custom flow never sets one).
+    // Default them to 'student' on creation so `public.jwt_role()`-driven RLS
+    // and the session-token `role` claim resolve for every fresh sign-up.
+    // Updates stay conditional below: an admin promotion must never be reset
+    // by an unrelated profile update.
+    const roleForUpsert = clerkRole ?? (eventType === 'user.created' ? 'student' : undefined);
+
+    // Mirror the default into Clerk `publicMetadata` too: the session token's
+    // `metadata` claim (what `public.jwt_role()` falls back to) is built from
+    // publicMetadata at token-mint time, so leaving it empty would keep
+    // student RLS checks failing until an admin touched the account.
+    if (eventType === 'user.created' && !clerkRole) {
+      try {
+        // `clerkClient` is a factory in Clerk v7 — await before `.users`.
+        const client = await clerkClient();
+        await client.users.updateUserMetadata(id, {
+          publicMetadata: { role: 'student' },
+        });
+      } catch (error) {
+        // Non-fatal: the Supabase row already carries the default, and the
+        // next `user.updated` retries this via the `?? 'student'` fallback.
+        console.error('Error defaulting publicMetadata.role for new user:', error);
+      }
+    }
     // The custom sign-up flow stashes the Campus ID in `unsafeMetadata` at
     // account creation (Clerk rejects unrecognised `publicMetadata` on the
     // sign-up resource), and the claim route mirrors it here once claimed.
@@ -102,9 +132,9 @@ export async function POST(req: Request) {
           full_name: fullName || null,
           email: primaryEmail || null,
           avatar_url: userData.image_url || null,
-          // `role` has a 'student' default; only overwrite when Clerk actually
-          // carries a role so an upsert cannot silently reset an admin.
-          ...(clerkRole ? { role: clerkRole } : {}),
+          // Write the resolved role only when we actually have one, so an
+          // unrelated `user.updated` can never silently reset an admin.
+          ...(roleForUpsert ? { role: roleForUpsert } : {}),
           // Same defensive pattern for the Campus ID: only write when present,
           // so admin-managed values are never clobbered by an empty payload.
           ...(campusId ? { campus_id: campusId } : {}),
