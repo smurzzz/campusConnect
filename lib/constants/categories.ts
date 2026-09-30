@@ -57,7 +57,7 @@ export const CAMPUS_LOCATIONS = [
   "Kingsley Hall",
   "Library Courtyard",
   "Maplewood Hall",
-  "Northbridge Sports Centre",
+  "ICCT Sports Centre",
   "Oakley Building",
   "Riverside Hall",
   "Student Union",

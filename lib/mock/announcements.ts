@@ -16,7 +16,7 @@ export const ANNOUNCEMENTS: Announcement[] = [
       "Orientation week opens on Thursday 24 September at 09:00 in Dockside Union. Every new student receives a welcome pack containing the campus map, timetable template and IT access instructions.",
       "Daily workshops cover academic advising, library orientation, wellbeing services and financial aid. Each session repeats at 10:00 and 15:00 so you can fit them around your registration slot.",
       "Faculty drop-ins run from 12:00 to 14:00 in each faculty house. Bring your questions about module selection, prerequisites and the summer research scheme.",
-      "Campus tours leave from the Student Union every hour and finish at the Northbridge Sports Centre. Accessibility-friendly tours can be booked at the help desk.",
+      "Campus tours leave from the Student Union every hour and finish at the ICCT Sports Centre. Accessibility-friendly tours can be booked at the help desk.",
     ],
     status: "Published",
     audience: "Everyone",
@@ -48,7 +48,7 @@ export const ANNOUNCEMENTS: Announcement[] = [
     excerpt:
       "The new evening loop runs every 20 minutes between 18:00 and 01:00, linking residences, the library and the sports centre.",
     body: [
-      "The evening loop replaces the current limited service and adds three stops: Juniper Residences, the Innovation Lab and Northbridge Sports Centre.",
+      "The evening loop replaces the current limited service and adds three stops: Juniper Residences, the Innovation Lab and ICCT Sports Centre.",
       "Buses depart the Student Union every 20 minutes from 18:00 until 01:00. The service is included in the student transit pass, so no ticket is needed.",
       "Live departure boards are available in the mobile app and at each shelter. Accessibility ramps are fitted on both loop buses.",
     ],

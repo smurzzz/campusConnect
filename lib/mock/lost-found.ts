@@ -82,7 +82,7 @@ export const LOST_FOUND_ITEMS: LostFoundItem[] = [
     name: "Grey raincoat",
     type: "Found",
     category: "Clothing",
-    location: "Northbridge Sports Centre",
+    location: "ICCT Sports Centre",
     date: "2026-09-18",
     status: "Claimed",
     description: "Left behind in the changing rooms after the athletics meet. Returned to its owner on the 19th.",

@@ -30,7 +30,7 @@ export const EVENTS: CampusEvent[] = [
     fullDate: "2026-10-04",
     startTime: "19:00",
     endTime: "21:30",
-    location: "Northbridge Sports Centre",
+    location: "ICCT Sports Centre",
     category: "Sports",
     capacity: 320,
     registered: 320,

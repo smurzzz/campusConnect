@@ -10,17 +10,70 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 /**
- * Client that presents the Clerk session token as the Supabase access token.
- * Every write goes through this so RLS sees a real `auth.uid()` and the
- * `role` claim from the session token's public metadata — without it the
- * admin policies (`auth.jwt() ->> 'role' = 'admin'`) can never pass.
+ * supabase-js replaces `client.auth` with a Proxy that THROWS on *every*
+ * property access when the `accessToken` option is set. That guard is meant
+ * to stop auth misuse, but it also detonates on harmless inspection probes
+ * (`Symbol.toStringTag` during devtools/React serialization) and crashes the
+ * Next.js dev overlay with
+ * "accessing supabase.auth.Symbol(Symbol.toStringTag) is not possible".
+ *
+ * The app never authenticates through Supabase — Clerk owns the session and
+ * the token flows through the accessToken callback — so we swap the
+ * throw-everything proxy for one that still refuses real auth calls
+ * (sign-in, session reads, MFA, admin) but answers inspection probes safely.
+ * Library internals are unaffected: in accessToken mode they never read
+ * `.auth` (SupabaseClient._getSessionToken returns via the callback first).
  */
+const BLOCKED_AUTH_METHODS = new Set([
+  "getSession",
+  "getSessionClaims",
+  "getUser",
+  "initialize",
+  "onAuthStateChange",
+  "setSession",
+  "refreshSession",
+  "signIn",
+  "signOut",
+  "signUp",
+  "verifyOtp",
+  "resetPasswordForEmail",
+  "updateUser",
+  "admin",
+])
+
+function installAuthGuard(client: SupabaseClient<Database>): SupabaseClient<Database> {
+  ;(client as { auth: unknown }).auth = new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        if (typeof prop === "string" && BLOCKED_AUTH_METHODS.has(prop)) {
+          throw new Error(
+            `supabase.auth.${prop}() is unavailable: this client is configured with the accessToken option (Clerk owns the session).`,
+          )
+        }
+        return undefined
+      },
+    },
+  )
+  return client
+}
+
 export function createAuthedSupabaseClient(
   getToken: () => Promise<string | null>,
 ): SupabaseClient<Database> {
-  return createClient<Database>(supabaseUrl, supabaseAnonKey, {
-    accessToken: async () => (await getToken()) ?? supabaseAnonKey,
-  })
+  return installAuthGuard(
+    createClient<Database>(supabaseUrl, supabaseAnonKey, {
+      accessToken: async () => {
+        try {
+          return (await getToken()) ?? supabaseAnonKey
+        } catch {
+          // SSR pass or a transient Clerk error: fall back to the anon key so
+          // RLS treats the request as anonymous instead of crashing the page.
+          return supabaseAnonKey
+        }
+      },
+    }),
+  )
 }
 
 // Types for our database tables
@@ -58,7 +111,7 @@ export type Database = {
           status?: string
           audience?: string | null
           image_url?: string | null
-          created_by?: string
+          created_by?: string | null
           created_at?: string
         }
         Relationships: [
@@ -314,7 +367,7 @@ export type Database = {
           id?: string
           user_id?: string
           type?: string | null
-          message?: string
+          message: string
           read?: boolean
           related_id?: string | null
           created_at?: string
@@ -686,7 +739,7 @@ export async function updateLostFoundItem(id: string, item: Database['public']['
   return data
 }
 
-export async function deleteLostFoundItem(id: string) {
+export async function deleteLostFoundItemById(id: string) {
   const { error } = await supabase
     .from('lost_found_items')
     .delete()
