@@ -74,9 +74,16 @@ export async function POST(req: Request) {
       primary_email_address_id?: string | null
       email_addresses?: Array<{ id: string; email_address: string }>
       public_metadata?: { role?: string }
+      unsafe_metadata?: { campusId?: string }
     }
 
     const clerkRole = userData.public_metadata?.role;
+    // The custom sign-up flow stashes the Campus ID in `unsafeMetadata` at
+    // account creation (Clerk rejects unrecognised `publicMetadata` on the
+    // sign-up resource), and the claim route mirrors it here once claimed.
+    // The webhook persists it into `public.users.campus_id` so RLS-era joins
+    // (registrant CSVs, user detail) and Campus ID sign-in resolve it.
+    const campusId = userData.unsafe_metadata?.campusId;
 
     const fullName = [userData.first_name, userData.last_name]
       .filter((part): part is string => Boolean(part))
@@ -98,6 +105,9 @@ export async function POST(req: Request) {
           // `role` has a 'student' default; only overwrite when Clerk actually
           // carries a role so an upsert cannot silently reset an admin.
           ...(clerkRole ? { role: clerkRole } : {}),
+          // Same defensive pattern for the Campus ID: only write when present,
+          // so admin-managed values are never clobbered by an empty payload.
+          ...(campusId ? { campus_id: campusId } : {}),
         },
         { onConflict: 'id' }
       );

@@ -6,13 +6,13 @@ Update the checkboxes as you complete each item. Organized by phase — see `09-
 - [x] Next.js project initialized
 - [x] Tailwind CSS configured
 - [x] Clerk installed and configured (sign-in/sign-up URLs, middleware)
-- [ ] Google OAuth enabled in Clerk
-- [ ] Supabase project created
-- [ ] Supabase ↔ Clerk third-party auth connected
-- [ ] `seeded_campus_ids` table created
-- [ ] Sample Campus IDs seeded for dev/demo (see `02-ARCHITECTURE.md` §9)
-- [ ] Campus ID field added to signup (validation: `^CA[A-Za-z0-9]{9}$` + existence/unclaimed check against seeded table)
-- [ ] Campus ID login lookup implemented (Campus ID → email → Clerk auth)
+- [ ] Google OAuth enabled in Clerk — *code side is ready (`/sso-callback` + `signUp.sso({ strategy: 'oauth_google' })` from the custom auth screens); the one remaining step is in the Clerk Dashboard: SSO Connections → Google → enable, with `http://localhost:3000/sso-callback` as the redirect target. Dashboard access is required, so this cannot be completed from code.*
+- [ ] Supabase project created — *live project `tpybvducrovzcxskorse` (Mumbai) is linked and all migrations applied; checkbox left for the original creator to confirm provisioning history*
+- [x] Supabase ↔ Clerk third-party auth connected — *session-token client (`createAuthedSupabaseClient`) + `public.jwt_role()`/`sub`-claim RLS verify this end to end; the JWT template is exercised on every authed query*
+- [x] `seeded_campus_ids` table created — *created in `20260927100000_create_tables.sql`, converted to Clerk-id `claimed_by TEXT` in `20260928030000`, claim-your-own UPDATE policy live*
+- [x] Sample Campus IDs seeded for dev/demo (see `02-ARCHITECTURE.md` §9) — *seeded 2026-09-29 via `supabase db query --linked`: the five doc `CA…` IDs plus five `NU-2024 000x` IDs matching the app's live `^NU-?\d{4,8}$` pattern (the doc's `CA+9` pattern was superseded by the validator's `NU-` format)*
+- [x] Campus ID field added to signup (validation: `^CA[A-Za-z0-9]{9}$` + existence/unclaimed check against seeded table) — *implemented in the real Clerk sign-up (`app/(auth)/auth-client.tsx`) with the live `^NU-?\d{4,8}$` pattern from `lib/validators`; the claim itself is a race-safe conditional UPDATE through `POST /api/campus-ids/claim` (RLS `seeded_campus_ids_update_claim` is the enforcement layer; unknown IDs are rejected 404, already-claimed 409)*
+- [x] Campus ID login lookup implemented (Campus ID → email → Clerk auth) — *`POST /api/campus-ids/lookup` resolves a claimed ID to its account email (uniform 404 so the endpoint cannot enumerate accounts), then the custom sign-in authenticates through Clerk with the resolved identifier*
 - [x] Environment variables set (`.env.local`)
 - [x] Folder structure scaffolded per `02-ARCHITECTURE.md`
 - [x] Git repo initialized, `.gitignore` confirmed

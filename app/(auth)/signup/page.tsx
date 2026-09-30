@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { CampusPage } from "@/components/campus-page";
+import { AuthSignUp } from "@/app/(auth)/auth-client";
 
 export const metadata: Metadata = {
   title: "Sign up — CampusConnect",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function SignupPage() {
-  return <CampusPage page="signup" />;
+  return <AuthSignUp />;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -13,7 +13,7 @@ import {
   LogIn, UserPlus, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useUser } from "@clerk/nextjs";
+import { useUser, useAuth } from "@clerk/nextjs";
 import { useRole } from "@/lib/clerk/use-role";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -134,7 +134,7 @@ function AppShell({ role, title, subtitle, actions, children }: { role: Role; ti
 function PageHeader({ title, text }: { title: string; text: string }) { return <div className="mb-8"><h1 className="page-title">{title}</h1><p className="mt-2 max-w-2xl text-muted-foreground">{text}</p></div>; }
 function Filters({ search="Search", extra=true, value, onValue }: { search?: string; extra?: boolean; value?: string; onValue?: (value:string)=>void }) { return <div className="mb-6 flex flex-col gap-3 sm:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"/><Input className="pl-9" placeholder={search} value={value} onChange={e=>onValue?.(e.target.value)}/></div>{extra&&<><select className="field-select"><option>All categories</option><option>Academic</option><option>Facilities</option><option>Community</option></select><Button variant="outline"><Filter/>Filters</Button></>}</div>; }
 export function EmptyState({ title, text, action }: { title:string; text:string; action?:ReactNode }) { return <div className="empty-state animate-rise"><span className="empty-state-icon"><Inbox/></span><h2 className="mt-4 text-lg font-bold">{title}</h2><p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{text}</p>{action&&<div className="mt-5">{action}</div>}</div>; }
-function StatCard({ label,value,icon,trend }: {label:string;value:string|number;icon:any;trend?:string}) { return <div className="stat-card"><div className="flex items-start justify-between"><div><p className="text-sm font-medium text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p>{trend&&<p className="mt-2 text-xs font-medium text-success"><TrendingUp className="mr-1 inline size-3"/>{trend}</p>}</div><span className="grid size-11 place-items-center rounded-lg bg-primary-soft text-primary">{icon}</span></div></div>; }
+function StatCard({ label,value,icon:Icon,trend }: {label:string;value:string|number;icon:ComponentType<{className?:string}>;trend?:string}) { return <div className="stat-card"><div className="flex items-start justify-between"><div><p className="text-sm font-medium text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p>{trend&&<p className="mt-2 text-xs font-medium text-success"><TrendingUp className="mr-1 inline size-3"/>{trend}</p>}</div><span className="grid size-11 place-items-center rounded-lg bg-primary-soft text-primary"><Icon /></span></div></div>; }
 export function Section({title,action,children}:{title:string;action?:ReactNode;children:ReactNode}) { return <section className="section-panel"><div className="mb-5 flex items-center justify-between"><h2 className="section-title">{title}</h2>{action}</div>{children}</section>; }
 function AssignConcernDialog({ concern }: { concern: ConcernListItem }) { const [assignee,setAssignee]=useState(concern.assignee ?? "Unassigned"); return <Dialog><DialogTrigger asChild><Button variant="ghost" size="icon" aria-label={`Assign ${concern.subject}`}><UserRound/></Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Assign concern</DialogTitle><DialogDescription>Choose the personnel team responsible for {concern.id}.</DialogDescription></DialogHeader><div className="rounded-md border border-border bg-muted/50 p-4"><p className="text-sm font-semibold">{concern.subject}</p><p className="mt-1 text-xs text-muted-foreground">Submitted by {concern.studentName} · {concern.category}</p></div><FormField label="Assign to personnel"><select className="field-select w-full" value={assignee} onChange={e=>setAssignee(e.target.value)}><option>Unassigned</option><option>Facilities Team</option><option>Student Services</option><option>Safety Office</option><option>Academic Affairs</option></select></FormField><div className="flex items-start gap-3 rounded-md bg-primary-soft p-3 text-sm text-primary"><Bell className="mt-0.5 shrink-0"/><p>The selected team will be notified and can update the concern immediately.</p></div><DialogFooter><Button onClick={()=>toast.success(`${concern.id} assigned to ${assignee}`)}>Confirm assignment</Button></DialogFooter></DialogContent></Dialog>; }
 export function ConcernsTable({ admin=false, staff=false, items, concerns }: { admin?:boolean;staff?:boolean;items?: ConcernListItem[];concerns?: ConcernListItem[] }) {
@@ -245,88 +245,7 @@ export function AdminDashboard({reports=false, stats, concernsByStatus, eventsAt
 function Thread({staff=false}:{staff?:boolean}) { return <AppShell role={staff?"staff":"student"} title="Air conditioning in Room 304" subtitle="Concern CC-1048 · Facility"><div className="grid gap-6 xl:grid-cols-[1fr_320px]"><Section title="Conversation"><div className="space-y-6"><div className="thread-item"><span className="avatar">MS</span><div><div className="flex flex-wrap items-center gap-2"><strong>Maya Santos</strong><span className="text-xs text-muted-foreground">Sep 24 · 10:18 AM</span></div><p className="mt-2 text-sm leading-6 text-muted-foreground">The air conditioning in Room 304 has not been working since Monday. Our afternoon classes have become uncomfortable.</p></div></div><div className="thread-item"><span className="avatar bg-success-soft text-success"><ShieldCheck/></span><div><div className="flex flex-wrap items-center gap-2"><strong>Facilities Team</strong><span className="text-xs text-muted-foreground">Sep 24 · 2:40 PM</span></div><p className="mt-2 text-sm leading-6 text-muted-foreground">Thanks for reporting this. A technician has inspected the unit and replacement parts are scheduled for tomorrow.</p></div></div></div><div className="mt-6 border-t border-border pt-5"><Textarea placeholder={staff?"Reply to the student…":"Add a follow-up comment…"}/><div className="mt-3 flex justify-end"><Button onClick={()=>toast.success("Reply sent")}><Send/>{staff?"Send response":"Add comment"}</Button></div></div></Section><Section title="Concern details"><dl className="detail-list"><div><dt>Status</dt><dd>{staff?<select className="field-select w-full"><option>In Progress</option><option>Pending</option><option>Resolved</option></select>:<StatusBadge status="In Progress"/>}</dd></div><div><dt>Category</dt><dd>Facility</dd></div><div><dt>Submitted</dt><dd>Sep 24, 2026</dd></div><div><dt>Assigned to</dt><dd>Facilities Team</dd></div></dl></Section></div></AppShell>; }
 function FormField({label,children,note}:{label:string;children:ReactNode;note?:string}) {return <label className="block"><span className="mb-2 block text-sm font-semibold">{label}</span>{children}{note&&<span className="mt-1.5 block text-xs text-muted-foreground">{note}</span>}</label>}
 function FormPage({lost=false}:{lost?:boolean}) { const [mode,setMode]=useState("Lost"); return <AppShell role="student" title={lost?"Report a lost or found item":"Submit a concern"} subtitle={lost?"Help reunite campus items with their owners.":"Tell us what happened and the right team will follow up."}><div className="max-w-3xl"><Section title={lost?"Item details":"Concern details"}><form className="space-y-5" onSubmit={e=>{e.preventDefault();toast.success(lost?"Item report submitted":"Concern submitted successfully")}}>{lost&&<div className="segmented">{["Lost","Found"].map(x=><Button type="button" key={x} variant={mode===x?"default":"ghost"} onClick={()=>setMode(x)}>{x}</Button>)}</div>}<div className="grid gap-5 sm:grid-cols-2"><FormField label={lost?"Item name":"Category"}>{lost?<Input placeholder="e.g. Black umbrella"/>:<select className="field-select w-full"><option>Academic</option><option>Facility</option><option>Administrative</option><option>Other</option></select>}</FormField><FormField label={lost?"Category":"Subject"}>{lost?<select className="field-select w-full"><option>Personal item</option><option>Electronics</option><option>Documents</option></select>:<Input placeholder="Briefly summarize your concern"/>}</FormField></div>{lost&&<div className="grid gap-5 sm:grid-cols-2"><FormField label="Location"><Input placeholder="Where was it lost or found?"/></FormField><FormField label="Date"><Input type="date"/></FormField></div>}<FormField label="Description"><Textarea className="min-h-36" placeholder="Add helpful details…"/></FormField><FormField label={lost?"Photo":"Attachment (optional)"} note="PNG, JPG or PDF up to 10 MB"><button type="button" className="upload-zone"><Upload/><span>{lost?"Upload a clear photo":"Drop a file here or browse"}</span></button></FormField><div className="flex justify-end"><Button size="lg" type="submit"><Send/>{lost?"Submit report":"Submit concern"}</Button></div></form></Section></div></AppShell> }
-function AuthField({ label, type = "text", placeholder, icon: Icon, onValue, delay, children }: { label: string; type?: string; placeholder: string; icon: typeof Mail; onValue?: (v: string) => void; delay?: number; children?: ReactNode }) {
-  const [show, setShow] = useState(false);
-  const isPw = type === "password";
-  return (
-    <div className="animate-rise" style={{ animationDelay: `${delay ?? 0}ms` }}>
-      <span className="mb-1.5 block text-sm font-semibold">{label}</span>
-      <div className="auth-field">
-        <Icon />
-        <Input className="h-11 pl-10" type={isPw && show ? "text" : type} placeholder={placeholder} onChange={(e) => onValue?.(e.target.value)} />
-        {isPw && <button type="button" aria-label={show ? "Hide password" : "Show password"} onClick={() => setShow(!show)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-primary">{show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>}
-      </div>
-      {children}
-    </div>
-  );
-}
-function GoogleMark() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="size-5">
-      <path d="M7.18 4.554a7.8 7.8 0 0 1 4.82-1.66c2.06 0 3.92.86 5.26 2.24a.55.55 0 0 1-.01.77l-1.75 1.75a.55.55 0 0 1-.76.01 4.63 4.63 0 0 0-2.74-1.42v2.35h3.86a.55.55 0 0 1 .54.65 7.85 7.85 0 0 1-1.98 3.98l1.9 1.9a.55.55 0 0 1 0 .78 9.87 9.87 0 0 1-6.32 2.32c-4.14 0-7.8-2.63-9.16-6.5a.55.55 0 0 1 .52-.73h3.06a.55.55 0 0 1 .52.37 5.3 5.3 0 0 0 1.24 1.95v-2.9H3.5a.55.55 0 0 1-.53-.7 9.9 9.9 0 0 1 4.21-5.94" />
-    </svg>
-  );
-}
-function AuthPage({ signup = false }: { signup?: boolean }) {
-  const [busy, setBusy] = useState(false);
-  const submit = (e: React.FormEvent) => { e.preventDefault(); setBusy(true); window.sessionStorage.setItem("cc-session","1"); setTimeout(() => { location.href = "/dashboard"; }, 1100); };
-  const google = () => { window.location.href = "/api/auth/google"; };
-  return (
-    <div className="auth-bg flex min-h-screen flex-col">
-      <div className="px-5 pt-5 sm:px-8"><Brand /></div>
-      <div className="flex flex-1 items-center justify-center px-5 py-12">
-        <div className="auth-card animate-rise w-full max-w-md">
-          <div className="text-center">
-            <span className="mx-auto grid size-12 place-items-center rounded-xl bg-primary text-primary-foreground shadow-brand transition-transform hover:scale-110 hover:-rotate-6"><GraduationCap /></span>
-            <h1 className="mt-5 text-2xl font-bold">{signup ? "Create your account" : "Welcome back"}</h1>
-            <p className="mt-2 text-sm text-muted-foreground">{signup ? "Join your campus community" : "Log in to continue to CampusConnect"}</p>
-          </div>
 
-          {/* Social login buttons */}
-          <div className="mb-6">
-            <Button variant="outline" className="w-full flex items-center justify-start gap-3" onClick={google}>
-              <span className="flex items-center justify-center size-9 rounded-md bg-[rgb(220,38,38)] text-[rgb(255,255,255)]"><GoogleMark /></span>
-              Sign in with Google
-            </Button>
-            <Button variant="outline" className="w-full flex items-center justify-start gap-3 mt-3">
-              <span className="flex items-center justify-center size-9 rounded-md bg-[rgb(59,130,246)] text-[rgb(255,255,255)]"><UserRound className="size-5" /></span>
-              Sign in with Campus ID
-            </Button>
-          </div>
-
-          <div className="border-t border-border/50 mt-6 pt-4">
-            <p className="text-center text-sm text-muted-foreground">— or —</p>
-          </div>
-
-          <form className="mt-6 space-y-4" onSubmit={submit}>
-            {signup && <AuthField label="Full name" placeholder="Your full name" icon={UserRound} delay={60} />}
-            <AuthField label="Email" type="email" placeholder="you@campus.edu" icon={Mail} delay={120} />
-            <AuthField label="Password" type="password" placeholder="••••••••" icon={LockKeyhole} delay={180} />
-            {signup && (
-              <div className="animate-rise flex items-center gap-3 rounded-lg border border-border bg-muted/60 p-3" style={{ animationDelay: "240ms" }}>
-                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary-soft text-primary"><UserRound /></span>
-                <div><p className="text-sm font-semibold">Role: Student</p><p className="text-xs text-muted-foreground">Personnel and admin accounts are assigned separately by the school.</p></div>
-              </div>
-            )}
-            {!signup && (
-              <div className="animate-rise flex items-center justify-between text-sm" style={{ animationDelay: "240ms" }}>
-                <label className="flex cursor-pointer items-center gap-2 font-medium text-muted-foreground"><input type="checkbox" className="size-4 accent-[var(--color-primary)]" defaultChecked />Remember me</label>
-                <Link href="/forgot-password" className="font-semibold text-primary hover:underline">Forgot password?</Link>
-              </div>
-            )}
-            <div className="animate-rise" style={{ animationDelay: "300ms" }}>
-              <Button className="h-11 w-full text-base" type="submit" disabled={busy}>
-                {busy ? <><LoaderCircle className="size-4 animate-spin" />{signup ? "Creating account…" : "Signing you in…"}</> : <>{signup ? "Create account" : "Log in"}<ArrowRight className="size-4" /></>}
-              </Button>
-            </div>
-          </form>
-          <p className="mt-6 text-center text-sm text-muted-foreground">{signup ? "Already have an account? " : "Don’t have an account? "}<Link className="font-semibold text-primary hover:underline" href={signup ? "/login" : "/signup"}>{signup ? "Log in" : "Sign up"}</Link></p>
-        </div>
-      </div>
-    </div>
-  );
-}
-function ForgotPassword(){const[sent,setSent]=useState(false);return <div className="auth-bg flex min-h-screen flex-col"><div className="px-5 pt-5 sm:px-8"><Brand/></div><div className="flex flex-1 items-center justify-center px-5 py-12"><div className="auth-card animate-rise">{sent?<div className="text-center"><span className="mx-auto grid size-14 place-items-center rounded-full bg-success-soft text-success"><CheckCircle2 className="size-7"/></span><h1 className="mt-5 text-2xl font-bold">Check your email</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">If an account matches that address, we sent instructions to reset your password.</p><Button className="mt-7 w-full" asChild><Link href="/login"><ArrowLeft/>Back to login</Link></Button></div>:<><div className="text-center"><span className="mx-auto grid size-12 place-items-center rounded-xl bg-primary-soft text-primary"><KeyRound/></span><h1 className="mt-5 text-2xl font-bold">Reset your password</h1><p className="mt-2 text-sm text-muted-foreground">Enter your campus email and we’ll send reset instructions.</p></div><form className="mt-7 space-y-5" onSubmit={e=>{e.preventDefault();setSent(true)}}><AuthField label="Campus email" type="email" placeholder="you@campus.edu" icon={Mail}/><Button className="h-11 w-full" type="submit">Send reset link<ArrowRight/></Button></form><Link href="/login" className="mt-6 flex items-center justify-center gap-2 text-sm font-semibold text-primary"><ArrowLeft/>Back to login</Link></>}</div></div></div>}
 function Landing() {
   const [announcementsData, setAnnouncementsData] = useState<Array<{ id: string; title: string; category: string | null; excerpt: string; date: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -475,11 +394,7 @@ function StudentDashboard() {
 
   return <AppShell role="student" title={`Good day, ${displayName.split(" ")[0]}`} subtitle="Here's what's happening around campus today."><div className="mb-6 grid gap-4 sm:grid-cols-3"><StatCard label="Unread announcements" value={announcementsData.length} icon={Megaphone}/><StatCard label="Upcoming events" value={eventsData.length} icon={CalendarCheck}/><StatCard label="Open concerns" value={openConcernCount} icon={MessageSquareText}/></div><div className="grid gap-6 xl:grid-cols-2"><Section title="Recent announcements" action={<Link href="/announcements" className="section-link">View all</Link>}><div className="divide-y divide-border">{announcementsData.length===0?<p className="py-3 text-sm text-muted-foreground">No announcements yet.</p>:announcementsData.map(a=><div className="py-3 first:pt-0" key={a.id}><span className="category-badge">{a.category}</span><p className="mt-2 font-semibold">{a.title}</p><p className="mt-1 text-xs text-muted-foreground">{new Date(a.created_at).toLocaleDateString()}</p></div>)}</div></Section><Section title="Upcoming events" action={<Link href="/events" className="section-link">View all</Link>}><div className="space-y-3">{eventsData.length===0?<p className="text-sm text-muted-foreground">No upcoming events yet.</p>:eventsData.map(e=><div className="flex items-center gap-3" key={e.id}><span className="grid size-12 shrink-0 place-items-center rounded-md bg-primary-soft text-xs font-bold text-primary">{new Date(e.start_time).toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span><div><p className="font-semibold">{e.title}</p><p className="text-xs text-muted-foreground">{e.location}</p></div></div>)}</div></Section><div className="xl:col-span-2"><Section title="My open concerns" action={<Link href="/concerns" className="section-link">View all</Link>}><ConcernsTable items={myConcerns}/></Section></div></div></AppShell>;
 }
-function useGuest(){const[signedIn,setSignedIn]=useState(false);useEffect(()=>{setSignedIn(window.location.search.includes("view=student")||window.sessionStorage.getItem("cc-session")==="1")},[]);return !signedIn}
-function Frame({title,subtitle,actions,children}:{title:string;subtitle?:string;actions?:ReactNode;children:ReactNode}){const guest=useGuest();if(!guest)return <AppShell role="student" title={title} {...(subtitle?{subtitle}:{})} actions={actions}>{children}</AppShell>;return <PublicShell><div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end animate-rise"><div><h1 className="page-title">{title}</h1>{subtitle&&<p className="mt-2 text-muted-foreground">{subtitle}</p>}</div><Button variant="outline" asChild><Link href="/login">Log in for full access<ArrowRight/></Link></Button></div>{children}</PublicShell>}
-function loginPrompt(){toast.info("Please log in to continue",{action:{label:"Log in",onClick:()=>{window.location.href="/login"}}})}
-function AnnouncementDetail(){return <Frame title="Enrollment schedule for Term 2" subtitle="Academic · Posted Sep 24, 2026"><Link href="/announcements" className="mb-5 inline-flex items-center gap-2 text-sm font-semibold text-primary"><ArrowLeft/>Back to announcements</Link><article className="section-panel max-w-4xl"><span className="category-badge">Academic</span><div className="mt-6 overflow-hidden rounded-md bg-event-blue p-10 text-center"><BookOpen className="mx-auto size-16 text-primary"/></div><div className="prose-copy"><p>Online enrollment for Term 2 opens on Monday, September 28. Students are encouraged to review their assigned enrollment schedule and adviser notes in advance.</p><h2>Before you enroll</h2><p>Confirm that all outstanding academic and financial clearances are reflected in your student portal. Contact Student Services if any requirement appears incorrectly.</p><p>Enrollment help desks will be available in the Learning Commons from 8:00 AM to 5:00 PM throughout the week.</p></div></article></Frame>}
-function EventDetail(){const guest=useGuest();const[registered,setRegistered]=useState(false);return <Frame title="Innovation Week 2026" subtitle="A week of ideas, making, and collaboration."><div className="grid gap-6 xl:grid-cols-[1fr_340px]"><article className="section-panel"><div className="mb-6 flex h-64 items-center justify-center rounded-md bg-event-blue"><Sparkles className="size-20 text-primary"/></div><h2 className="section-title">About this event</h2><p className="mt-4 leading-7 text-muted-foreground">Join students, faculty, and industry mentors for hands-on workshops, startup showcases, design challenges, and conversations about the future of technology.</p></article><aside className="section-panel h-fit"><div className="space-y-4"><p className="flex gap-3"><CalendarDays className="text-primary"/><span><strong className="block">October 4, 2026</strong><small className="text-muted-foreground">9:00 AM – 5:00 PM</small></span></p><p className="flex gap-3"><MapPin className="text-primary"/><span><strong className="block">University Hall</strong><small className="text-muted-foreground">Main campus</small></span></p></div><div className="my-6 border-t border-border pt-5"><div className="mb-2 flex justify-between text-sm"><span className="font-medium">42 / 60 registered</span><span className="text-muted-foreground">18 spots left</span></div><Progress value={70}/></div><Button className="w-full" size="lg" variant={registered?"secondary":"default"} onClick={()=>{if(guest){loginPrompt();return}setRegistered(!registered);toast.success(registered?"Registration cancelled":"You’re registered!")}}>{registered?<><Check/>Registered</>:"Register for this event"}</Button></aside></div></Frame>}
+
 export function LostFound({ items }: { items?: LostFoundRow[] }) {
   const [tab, setTab] = useState<ItemType>(ITEM_TYPES.LOST);
   const [q, setQ] = useState("");
@@ -552,7 +467,15 @@ export function LostFound({ items }: { items?: LostFoundRow[] }) {
     </Frame>
   );
 }
-function LostDetail(){const guest=useGuest();return <Frame title="Blue insulated bottle" subtitle="Lost item · Reported Sep 24"><div className="grid gap-6 xl:grid-cols-[1fr_420px]"><div className="grid min-h-96 place-items-center rounded-md bg-muted text-9xl">🥤</div><Section title="Item details"><StatusBadge status="Open"/><p className="mt-5 leading-7 text-muted-foreground">A navy blue insulated bottle with several small travel stickers. Last seen after the afternoon laboratory session.</p><dl className="detail-list mt-6"><div><dt>Location</dt><dd>Science Building, Room 205</dd></div><div><dt>Date reported</dt><dd>Sep 24, 2026</dd></div><div><dt>Category</dt><dd>Personal item</dd></div></dl><Button className="mt-6 w-full" size="lg" onClick={()=>guest?loginPrompt():toast.success("Message request sent")}><Mail/>Message reporter</Button></Section></div></Frame>}
+
+/**
+ * Shell switch for public pages that render differently for signed-in
+ * members: members get the student app shell, guests get the public shell
+ * with a log-in call to action. Auth state comes from the real Clerk session
+ * (server-rendered, so there is no shell flash after hydration).
+ */
+function Frame({title,subtitle,actions,children}:{title:string;subtitle?:string;actions?:ReactNode;children:ReactNode}){const{isSignedIn,isLoaded}=useAuth();if(!isLoaded)return <PublicShell>{children}</PublicShell>;if(isSignedIn)return <AppShell role="student" title={title} {...(subtitle?{subtitle}:{})} actions={actions}>{children}</AppShell>;return <PublicShell><div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-end animate-rise"><div><h1 className="page-title">{title}</h1>{subtitle&&<p className="mt-2 text-muted-foreground">{subtitle}</p>}</div><Button variant="outline" asChild><Link href="/login">Log in for full access<ArrowRight/></Link></Button></div>{children}</PublicShell>}
+
 /**
  * Profile screen on the real session: identity comes from Clerk (name, email,
  * avatar), role from publicMetadata. Contact-number edits update the Clerk
@@ -928,6 +851,6 @@ export function CampusPage({ page, children }: { page: PageKey; children?: React
       </AppShell>
     );
   }
-  if(page==="forgot")return <ForgotPassword/>; if(page==="login")return <AuthPage/>; if(page==="signup")return <AuthPage signup/>; if(page==="announcements")return <PublicList/>; if(page==="events")return <PublicList eventsPage/>; if(page==="dashboard")return <StudentDashboard/>; if(page==="announcement-detail")return <AnnouncementDetail/>; if(page==="event-detail")return <EventDetail/>; if(page==="my-events")return <MyEvents/>; if(page==="concern-new")return <FormPage/>; if(page==="concern-detail")return <Thread/>; if(page==="lost-new")return <FormPage lost/>; if(page==="lost-found")return <LostFound/>; if(page==="lost-detail")return <LostDetail/>; if(page==="profile")return <Profile/>; if(page==="notifications")return <Notifications/>; if(page==="staff-dashboard")return <StaffDashboard/>; if(page==="staff-concerns")return <AppShell role="staff" title="All concerns" subtitle="Review, update, and respond to student concerns."><Filters search="Search concerns"/><ConcernsTable staff/></AppShell>; if(page==="staff-concern-detail")return <Thread staff/>; if(page==="staff-lost")return <StaffLost/>; if(page==="admin-dashboard")return <AdminDashboard/>; if(page==="admin-announcements")return <AdminList kind="announcements"/>; if(page==="admin-events")return <AdminList kind="events"/>; if(page==="admin-concerns")return <AdminList kind="concerns"/>; if(page==="admin-lost")return <AdminList kind="lost"/>; if(page==="admin-users")return <AdminList kind="users"/>; if(page==="registrants")return <Registrants/>; if(page==="reports")return <AdminDashboard reports/>; if(page==="denied")return <AccessDenied/>; if(page==="concerns")return <AppShell role="student" title="My concerns" subtitle="Track every request from submission to resolution." actions={<Button asChild><Link href="/concerns/new"><Plus/>Submit concern</Link></Button>}><Filters search="Search my concerns"/><ConcernsTable/></AppShell>;
+  if(page==="announcements")return <PublicList/>; if(page==="events")return <PublicList eventsPage/>; if(page==="dashboard")return <StudentDashboard/>; if(page==="my-events")return <MyEvents/>; if(page==="concern-new")return <FormPage/>; if(page==="concern-detail")return <Thread/>; if(page==="lost-new")return <FormPage lost/>; if(page==="lost-found")return <LostFound/>; if(page==="profile")return <Profile/>; if(page==="notifications")return <Notifications/>; if(page==="staff-dashboard")return <StaffDashboard/>; if(page==="staff-concerns")return <AppShell role="staff" title="All concerns" subtitle="Review, update, and respond to student concerns."><Filters search="Search concerns"/><ConcernsTable staff/></AppShell>; if(page==="staff-concern-detail")return <Thread staff/>; if(page==="staff-lost")return <StaffLost/>; if(page==="admin-dashboard")return <AdminDashboard/>; if(page==="admin-announcements")return <AdminList kind="announcements"/>; if(page==="admin-events")return <AdminList kind="events"/>; if(page==="admin-concerns")return <AdminList kind="concerns"/>; if(page==="admin-lost")return <AdminList kind="lost"/>; if(page==="admin-users")return <AdminList kind="users"/>; if(page==="registrants")return <Registrants/>; if(page==="reports")return <AdminDashboard reports/>; if(page==="denied")return <AccessDenied/>; if(page==="concerns")return <AppShell role="student" title="My concerns" subtitle="Track every request from submission to resolution." actions={<Button asChild><Link href="/concerns/new"><Plus/>Submit concern</Link></Button>}><Filters search="Search my concerns"/><ConcernsTable/></AppShell>;
   return <Landing/>;
 }
