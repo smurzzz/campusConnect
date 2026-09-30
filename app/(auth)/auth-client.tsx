@@ -417,11 +417,17 @@ function SignInCard() {
         </AuthField>
 
         <div className="flex items-center justify-between text-sm">
+          {/*
+            Clerk manages session lifetime itself (development instances keep
+            sessions until sign-out), so "Remember me" is informational here —
+            the session persists per Clerk's standard behavior either way.
+          */}
+          <label className="flex cursor-pointer items-center gap-2 font-medium text-muted-foreground">
+            <input type="checkbox" className="size-4 accent-[var(--color-primary)]" defaultChecked />
+            Remember me
+          </label>
           <Link href="/forgot-password" className="font-semibold text-primary hover:underline">
             Forgot password?
-          </Link>
-          <Link href="/signup" className="font-semibold text-primary hover:underline">
-            Create account
           </Link>
         </div>
 

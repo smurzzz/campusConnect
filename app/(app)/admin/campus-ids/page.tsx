@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { CampusPage } from "@/components/campus-page";
+import CampusIdsPage from "./campus-ids-page-client";
 
 export const metadata: Metadata = {
   title: "Campus IDs — CampusConnect",
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function AdminCampusIdsPage() {
-  return <CampusPage page="admin-users" />;
+  return <CampusIdsPage />;
 }

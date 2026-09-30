@@ -93,6 +93,10 @@ export default function AdminConcernsPage() {
       ) : (
         <ConcernsTable
           admin
+          assignClient={client}
+          onAssigneeChanged={(concernId, assigneeName) =>
+            setConcerns((prev) => prev.map((row) => (row.id === concernId ? { ...row, assignee_name: assigneeName } : row)))
+          }
           items={filtered.map((row) => ({
             id: row.id,
             subject: row.subject,

@@ -8,8 +8,10 @@ import { CampusPage, EmptyState, StatusBadge } from "@/components/campus-page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listLostFoundItems } from "@/lib/lost-found";
+import { listLostFoundItems, type LostFoundDbStatus } from "@/lib/lost-found";
+import { LostFoundRowActions } from "@/components/lost-found/lost-found-actions";
 import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
+import { useRole } from "@/lib/clerk/use-role";
 import { toItemStatusLabel } from "@/lib/lost-found-labels";
 
 function formatDate(value: string | null): string {
@@ -20,6 +22,8 @@ function formatDate(value: string | null): string {
 
 export default function StaffLostFoundPage() {
   const client = useSupabaseClient();
+  const role = useRole();
+  const isAdmin = role === "admin";
   const [items, setItems] = useState<Awaited<ReturnType<typeof listLostFoundItems>>["rows"]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -107,6 +111,15 @@ export default function StaffLostFoundPage() {
                 <StatusBadge status={toItemStatusLabel(item.status)} />
               </div>
               <div className="flex justify-end">
+                <LostFoundRowActions
+                  client={client}
+                  item={{ id: item.id, name: item.name, status: item.status }}
+                  isAdmin={isAdmin}
+                  onUpdated={(id, status: LostFoundDbStatus) =>
+                    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, status } : x)))
+                  }
+                  onDeleted={(id) => setItems((prev) => prev.filter((x) => x.id !== id))}
+                />
                 <Button variant="ghost" size="icon" asChild>
                   <Link href={`/staff/lost-found/${item.id}`} aria-label={`Review ${item.name}`}>
                     →

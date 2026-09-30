@@ -144,3 +144,15 @@ export async function updateLostFoundStatus(
   if (!error) return { ok: true, error: null };
   return { ok: false, error: error.message };
 }
+
+/**
+ * Admin-only archive/delete (RLS: `lost_found_items_delete_admin`).
+ */
+export async function deleteLostFoundItem(
+  client: DbClient,
+  id: string,
+): Promise<{ ok: boolean; error: string | null }> {
+  const { error } = await client.from("lost_found_items").delete().eq("id", id);
+  if (!error) return { ok: true, error: null };
+  return { ok: false, error: error.message };
+}

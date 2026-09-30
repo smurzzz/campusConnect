@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
+import { toast } from "sonner";
 
 import { CampusPage, EmptyState, StatusBadge } from "@/components/campus-page";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
@@ -34,6 +36,47 @@ export default function AdminUsersPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<string>("");
+  const [busyUserId, setBusyUserId] = useState<string | null>(null);
+
+  // In-place role/status changes go through the admin-checked API routes
+  // (same ones the detail page uses) so Clerk publicMetadata and this table
+  // stay in sync. The row state updates locally on success.
+  const changeRole = async (userId: string, role: string) => {
+    setBusyUserId(userId);
+    try {
+      const res = await fetch(`/api/users/${userId}/role`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, role }),
+      });
+      if (!res.ok) throw new Error(await res.text().catch(() => "Role update failed"));
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
+      toast.success(`Role updated to ${ROLE_LABELS[role as Role] ?? role}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Role update failed");
+    } finally {
+      setBusyUserId(null);
+    }
+  };
+
+  const toggleStatus = async (user: UserRow) => {
+    const status = user.status === "active" ? "deactivated" : "active";
+    setBusyUserId(user.id);
+    try {
+      const res = await fetch(`/api/users/${user.id}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, status }),
+      });
+      if (!res.ok) throw new Error(await res.text().catch(() => "Status update failed"));
+      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, status } : u)));
+      toast.success(status === "active" ? "Account activated" : "Account deactivated — sign-in blocked");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Status update failed");
+    } finally {
+      setBusyUserId(null);
+    }
+  };
 
   useEffect(() => {
     void (async () => {
@@ -133,7 +176,36 @@ export default function AdminUsersPage() {
                 <StatusBadge status={toAccountStatusLabel(user.status)} />
               </div>
               <div className="text-sm text-muted-foreground">{formatDate(user.created_at)}</div>
-              <div className="flex justify-end">
+              <div className="flex items-center justify-end gap-2">
+                {busyUserId === user.id ? (
+                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <>
+                    <select
+                      className="field-select h-8 w-28 text-xs"
+                      aria-label={`Change role for ${user.full_name ?? "user"}`}
+                      value={user.role}
+                      onChange={(event) => void changeRole(user.id, event.target.value)}
+                    >
+                      {Object.values(ROLE_LABELS).map((label) => {
+                        const value = label.toLowerCase();
+                        return (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        );
+                      })}
+                    </select>
+                    <Button
+                      variant={user.status === "active" ? "outline" : "default"}
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => void toggleStatus(user)}
+                    >
+                      {user.status === "active" ? "Deactivate" : "Activate"}
+                    </Button>
+                  </>
+                )}
                 <a
                   href={`/admin/users/${user.id}`}
                   className="text-sm font-semibold text-primary hover:underline"

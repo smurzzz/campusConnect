@@ -7,7 +7,8 @@ import { Search } from "lucide-react";
 import { CampusPage, EmptyState, StatusBadge } from "@/components/campus-page";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listLostFoundItems } from "@/lib/lost-found";
+import { listLostFoundItems, type LostFoundDbStatus } from "@/lib/lost-found";
+import { LostFoundRowActions } from "@/components/lost-found/lost-found-actions";
 import { toItemStatusLabel } from "@/lib/lost-found-labels";
 import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
 
@@ -105,9 +106,18 @@ export default function AdminLostFoundPage() {
                 <StatusBadge status={toItemStatusLabel(item.status)} />
               </div>
               <div className="flex justify-end">
+                <LostFoundRowActions
+                  client={client}
+                  item={{ id: item.id, name: item.name, status: item.status }}
+                  isAdmin
+                  onUpdated={(id, status: LostFoundDbStatus) =>
+                    setItems((prev) => prev.map((x) => (x.id === id ? { ...x, status } : x)))
+                  }
+                  onDeleted={(id) => setItems((prev) => prev.filter((x) => x.id !== id))}
+                />
                 <Link
                   href={`/staff/lost-found/${item.id}`}
-                  className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+                  className="inline-flex items-center gap-1 px-1 text-sm font-semibold text-primary hover:underline"
                   aria-label={`Review ${item.name}`}
                 >
                   Review
