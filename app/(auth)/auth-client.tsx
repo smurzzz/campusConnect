@@ -12,7 +12,6 @@ import {
   EyeOff,
   GraduationCap,
   KeyRound,
-  Loader2,
   LoaderCircle,
   LockKeyhole,
   Mail,
@@ -56,8 +55,8 @@ function Brand() {
 
 function GoogleMark() {
   return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="size-5">
-      <path d="M7.18 4.554a7.8 7.8 0 0 1 4.82-1.66c2.06 0 3.92.86 5.26 2.24a.55.55 0 0 1-.01.77l-1.75 1.75a.55.55 0 0 1-.76.01 4.63 4.63 0 0 0-2.74-1.42v2.35h3.86a.55.55 0 0 1 .54.65 7.85 7.85 0 0 1-1.98 3.98l1.9 1.9a.55.55 0 0 1 0 .78 9.87 9.87 0 0 1-6.32 2.32c-4.14 0-7.8-2.63-9.16-6.5a.55.55 0 0 1 .52-.73h3.06a.55.55 0 0 1 .52.37 5.3 5.3 0 0 0 1.24 1.95v-2.9H3.5a.55.55 0 0 1-.53-.7 9.9 9.9 0 0 1 4.21-5.94" />
+    <svg viewBox="0 0 24 24" aria-hidden className="size-5">
+      <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.6 3.9-5.5 3.9-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.3 14.6 2.3 12 2.3 6.6 2.3 2.3 6.6 2.3 12s4.3 9.7 9.7 9.7c5.6 0 9.3-3.9 9.3-9.5 0-.6-.1-1.1-.2-1.6H12z" />
     </svg>
   );
 }
@@ -249,12 +248,34 @@ function useGoogleAuth() {
 function GoogleButton() {
   const { start, busy } = useGoogleAuth();
   return (
-    <Button variant="outline" className="flex w-full items-center justify-start gap-3" onClick={start} disabled={busy}>
-      <span className="flex size-9 items-center justify-center rounded-md bg-[rgb(220,38,38)] text-[rgb(255,255,255)]">
-        {busy ? <Loader2 className="size-5 animate-spin" /> : <GoogleMark />}
-      </span>
-      {busy ? "Redirecting to Google…" : "Sign in with Google"}
+    <Button variant="outline" className="h-11 hover:-translate-y-0.5" onClick={start} disabled={busy}>
+      {busy ? <LoaderCircle className="size-4 animate-spin" /> : <GoogleMark />}
+      {busy ? "Redirecting…" : "Google"}
     </Button>
+  );
+}
+
+/**
+ * The "or continue with" pair from the Phase-2 mock: slim side-by-side
+ * outline buttons under the form. `onCampusId` wires the Campus ID button
+ * to the surrounding flow (mode switch on sign-in, a hint on sign-up).
+ */
+function ContinueWithRow({ onCampusId }: { onCampusId: () => void }) {
+  return (
+    <>
+      <div className="mt-6 flex items-center gap-3 text-xs font-medium text-muted-foreground">
+        <span className="h-px flex-1 bg-border" />
+        or continue with
+        <span className="h-px flex-1 bg-border" />
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <GoogleButton />
+        <Button variant="outline" className="h-11 hover:-translate-y-0.5" onClick={onCampusId}>
+          <GraduationCap className="text-primary" />
+          Campus ID
+        </Button>
+      </div>
+    </>
   );
 }
 
@@ -370,24 +391,7 @@ function SignInCard() {
 
   return (
     <AuthCard>
-      <GoogleButton />
-
-      <Button
-        variant="outline"
-        className="mt-3 flex w-full items-center justify-start gap-3"
-        onClick={() => switchMode(mode === "email" ? "campusId" : "email")}
-      >
-        <span className="flex size-9 items-center justify-center rounded-md bg-[rgb(59,130,246)] text-[rgb(255,255,255)]">
-          <UserRound className="size-5" />
-        </span>
-        {mode === "email" ? "Sign in with Campus ID" : "Sign in with email instead"}
-      </Button>
-
-      <div className="mt-6 border-t border-border/50 pt-4">
-        <p className="text-center text-sm text-muted-foreground">— or —</p>
-      </div>
-
-      <form className="mt-6 space-y-4" onSubmit={submit} noValidate>
+      <form className="space-y-4" onSubmit={submit} noValidate>
         <AuthField
           label={mode === "email" ? "Email" : "Campus ID"}
           type="text"
@@ -435,6 +439,16 @@ function SignInCard() {
           )}
         </Button>
       </form>
+
+      <ContinueWithRow
+        onCampusId={() => {
+          if (mode === "email") {
+            switchMode("campusId");
+          } else {
+            toast.info("Already using Campus ID — enter it above");
+          }
+        }}
+      />
 
       <p className="mt-6 text-center text-sm text-muted-foreground">
         Don’t have an account?{" "}
@@ -683,13 +697,7 @@ function SignUpCard() {
 
   return (
     <AuthCard>
-      <GoogleButton />
-
-      <div className="mt-6 border-t border-border/50 pt-4">
-        <p className="text-center text-sm text-muted-foreground">— or —</p>
-      </div>
-
-      <form className="mt-6 space-y-4" onSubmit={submitDetails} noValidate>
+      <form className="space-y-4" onSubmit={submitDetails} noValidate>
         <div className="grid gap-4 sm:grid-cols-2">
           <AuthField label="First name" placeholder="Maya" icon={UserRound} value={values.firstName} onValue={(value) => set("firstName", value)} autoComplete="given-name">
             <FieldError message={errors.firstName} />
@@ -748,6 +756,8 @@ function SignUpCard() {
           )}
         </Button>
       </form>
+
+      <ContinueWithRow onCampusId={() => toast.info("Enter your Campus ID in the form above")} />
 
       <p className="mt-6 text-center text-sm text-muted-foreground">
         Already have an account?{" "}
