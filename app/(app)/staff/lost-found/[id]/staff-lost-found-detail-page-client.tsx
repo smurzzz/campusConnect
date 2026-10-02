@@ -23,11 +23,7 @@ export default function StaffLostFoundDetailPage() {
   const [statusLoading, setStatusLoading] = useState(false);
 
   const fetchItem = useCallback(async () => {
-    if (!id) {
-      setError("Item ID is missing");
-      setLoading(false);
-      return;
-    }
+    if (!id) return;
     const result = await getLostFoundItem(client, id);
     if (result.error) setError(result.error);
     else if (!result.row) setError("Lost & found item not found");
@@ -36,7 +32,9 @@ export default function StaffLostFoundDetailPage() {
   }, [client, id]);
 
   useEffect(() => {
-    void fetchItem();
+    void (async () => {
+      await fetchItem();
+    })();
   }, [fetchItem]);
 
   const handleStatusChange = async (status: "reported" | "claimed") => {
@@ -58,6 +56,14 @@ export default function StaffLostFoundDetailPage() {
       setStatusLoading(false);
     }
   };
+
+  if (!id) {
+    return (
+      <CampusPage page="staff-lost-detail">
+        <p>Item ID is missing.</p>
+      </CampusPage>
+    );
+  }
 
   if (loading) {
     return (

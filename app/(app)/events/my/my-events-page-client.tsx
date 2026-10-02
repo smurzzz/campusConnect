@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { CalendarDays, MapPin, Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,6 +22,14 @@ export default function MyEventsPage() {
   const client = useSupabaseClient();
   const { registrations, loading, error, refresh } = useMyRegistrations();
   const [pendingId, setPendingId] = useState<string | null>(null);
+  // "Now" sampled once per mount and refreshed every minute, so the
+  // Past/Upcoming badge never reads an impure clock during render.
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleCancel = async (eventId: string) => {
     setPendingId(eventId);
@@ -67,7 +75,7 @@ export default function MyEventsPage() {
           {registrations.map(({ id, event, registered_at }) => {
             if (!event) return null;
             const startsAt = new Date(event.start_time);
-            const past = startsAt.getTime() < Date.now();
+            const past = startsAt.getTime() < now;
 
             return (
               <div className="content-card flex flex-col justify-between gap-4 sm:flex-row sm:items-center" key={id}>

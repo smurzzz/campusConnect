@@ -49,11 +49,7 @@ export default function StaffConcernDetailPage() {
   const [assignLoading, setAssignLoading] = useState(false);
 
   const fetchThread = useCallback(async () => {
-    if (!id) {
-      setError("Concern ID is missing");
-      setLoading(false);
-      return;
-    }
+    if (!id) return;
 
     const [concernResult, messageResult] = await Promise.all([
       getConcern(client, id),
@@ -73,7 +69,9 @@ export default function StaffConcernDetailPage() {
   }, [client, id]);
 
   useEffect(() => {
-    void fetchThread();
+    void (async () => {
+      await fetchThread();
+    })();
   }, [fetchThread]);
 
   // Assignment dropdown needs the personnel directory (admin SELECT policy
@@ -137,6 +135,14 @@ export default function StaffConcernDetailPage() {
       setReplyLoading(false);
     }
   };
+
+  if (!id) {
+    return (
+      <CampusPage page="staff-concern-detail">
+        <p>Concern ID is missing.</p>
+      </CampusPage>
+    );
+  }
 
   if (loading) {
     return (

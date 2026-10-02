@@ -496,14 +496,6 @@ function SignUpCard() {
   const claimHandled = useRef(false);
   const codeRefs = useRef<Array<HTMLInputElement | null>>([]);
 
-  if (!signUp) {
-    return (
-      <AuthCard>
-        <CenteredSpinner />
-      </AuthCard>
-    );
-  }
-
   const set = <K extends keyof SignUpFormValues>(key: K, value: SignUpFormValues[K]) =>
     setValues((current) => ({ ...current, [key]: value }));
 
@@ -620,6 +612,16 @@ function SignUpCard() {
       }
     })();
   }, [destination, router, signUp, stage, values.campusId]);
+
+  // Guard clause lives *after* every hook (including the effect above) so the
+  // hook order stays identical whether or not Clerk has loaded signUp yet.
+  if (!signUp) {
+    return (
+      <AuthCard>
+        <CenteredSpinner />
+      </AuthCard>
+    );
+  }
 
   if (stage === "claimId") {
     return (

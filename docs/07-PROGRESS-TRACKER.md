@@ -20,7 +20,7 @@ Update the checkboxes as you complete each item. Organized by phase — see `09-
 *Note: bulk CSV import for Campus IDs is a stretch goal, not required for MVP — manual single-entry (or direct database seeding) is sufficient for now.*
 
 ## Phase 1 — Database & RLS (9 items)
-- [ ] `users` table (synced from Clerk) — *the table was `id UUID REFERENCES auth.users(id)`, but auth is Clerk, whose ids are opaque strings, so no row could ever be created. `20260928030000_migrate_users_id_to_clerk_text.sql` converted `users.id` and all eight foreign keys pointing at it to `TEXT` and rewrote the RLS policies to compare against `(auth.jwt() ->> 'sub')`. Applied and verified against the live project 2026-09-28: every converted column accepts a Clerk-style id, and RLS policies must be dropped before the type change or Postgres rejects the ALTER.*
+- [x] `users` table (synced from Clerk) — *the table was `id UUID REFERENCES auth.users(id)`, but auth is Clerk, whose ids are opaque strings, so no row could ever be created. `20260928030000_migrate_users_id_to_clerk_text.sql` converted `users.id` and all eight foreign keys pointing at it to `TEXT` and rewrote the RLS policies to compare against `(auth.jwt() ->> 'sub')`. Applied and verified against the live project 2026-09-28: every converted column accepts a Clerk-style id, and RLS policies must be dropped before the type change or Postgres rejects the ALTER.*
 - [x] `announcements` table + RLS policies — *applied and verified against the live project 2026-09-28: drafts are hidden from the anon key, anon writes are refused, and the status/audience CHECKs reject bad values*
 - [x] `events` table + RLS policies — *policies rebuilt in `20260928050000`: owner update/delete via `(auth.jwt() ->> 'sub')`, admin-only insert with the new `public.jwt_role()` helper*
 - [x] `event_registrations` table + RLS policies — *own-rows only; `(event_id, student_id)` unique + `event_capacity_trigger` enforce capacity server-side*
@@ -80,21 +80,21 @@ Update the checkboxes as you complete each item. Organized by phase — see `09-
 - [x] 404 Page Not Found
 - [x] Access Denied
 
-*Note: all 38 screens are implemented on the App Router. Routes are grouped as `app/(public)`, `app/(app)` and `app/(auth)`; `/admin/*` is admin-only and `/staff/*` is personnel/admin in `proxy.ts`. Every module (announcements, events, concerns, lost & found, notifications, users, reports) now reads and writes Supabase through the session-bound client (see Phase 3); `lib/mock/*` is unreferenced legacy.*
+*Note: all 38 screens are implemented on the App Router. Routes are grouped as `app/(public)`, `app/(app)` and `app/(auth)`; `/admin/*` is admin-only and `/staff/*` is personnel/admin in `proxy.ts`. Every module (announcements, events, concerns, lost & found, notifications, users, reports) now reads and writes Supabase through the session-bound client (see Phase 3); the old `lib/mock/*` legacy data and the superseded `src/middleware.ts` were deleted during pre-Phase-4 housekeeping.*
 
-*Build status: `npx tsc --noEmit` and `npm run build` pass. `npm run lint` reports 58 errors, all pre-existing `react-hooks` React Compiler violations (`immutability`, `set-state-in-effect`, `refs`) and `no-explicit-any` in the mock-data modules, plus unused imports in `lib/actions.ts` and `src/middleware.ts`.*
+*Build status (2026-10-02): `npx tsc --noEmit`, `npm run build`, and `npm run lint` all pass — **0 lint problems**. The pre-existing `react-hooks` React Compiler violations (`set-state-in-effect`, `immutability`, `purity`, `rules-of-hooks` in `auth-client.tsx`), unused vars, and dead code were all fixed rather than suppressed.*
 
 *Page structure: any page that needs browser state is split into a server `page.tsx` (which owns `export const metadata`) and a colocated `*-client.tsx` with `"use client"`. `metadata` cannot be exported from a client module, and a server module cannot import `useState`/`useEffect`, so neither can live in one file.*
 
 ## Phase 3 — Backend Logic / Functionality (8 items)
-- [ ] Auth: sign up, log in, log out, role assignment, protected routing (email/password, Google, Campus ID) — *the Clerk webhook only handled `user.updated` and `user.deleted`, with no `user.created` branch, so `public.users` was never populated. It now upserts on both events through a service-role client, which is required because `public.users` has no INSERT or DELETE policy.*
+- [x] Auth: sign up, log in, log out, role assignment, protected routing (email/password, Google, Campus ID) — *the Clerk webhook only handled `user.updated` and `user.deleted`, with no `user.created` branch, so `public.users` was never populated. It now upserts on both events through a service-role client, which is required because `public.users` has no INSERT or DELETE policy. (Google sign-in additionally requires the Clerk Dashboard toggle tracked under Phase 0.)*
 - [x] Announcements: full CRUD, publish/draft toggle, category filter, search — *verified live 2026-09-28*
 - [x] Events: full CRUD, registration with capacity enforcement, cancellation, registrant export — *`lib/events.ts` + `use-events.ts`; registration is session-bound with the capacity trigger as the real enforcement; admin manager (`components/events/event-manager.tsx`) covers create/edit/delete; registrants page exports CSV*
 - [x] Concerns: submission with attachment, threaded replies, status updates, assignment to personnel — *uploads to `concern-attachments` under `<clerk-id>/`; staff detail page updates status (trigger notifies the student) and assigns from a real personnel directory*
 - [x] Lost & Found: report with photo upload, status updates (open/claimed), search/filter by type — *uploads to `lost-found-attachments`; staff and admin lists filter/search; claim fires the lost-found trigger*
 - [x] Notifications: triggers on announcement/event/concern events, mark as read, realtime badge update — *all five trigger functions were inserting into `notifications.title`/`.body`, which do not exist; fixed in `20260928020000_fix_notification_trigger_columns.sql` (the live column is `message`). The publish trigger also compared `uuid <> text` across `users.id`/`announcements.created_by`, fixed in `20260928010000`. The announcement path verified end-to-end 2026-09-28: publishing notified every non-author user with a populated `message`, and a draft produced no notification. `use-notifications.ts` rewritten on the token-bound client with realtime INSERT/UPDATE channels for the live bell badge*
 - [x] User management: role changes, deactivation, Campus ID seeding — *role route updates Clerk `publicMetadata` and mirrors into `public.users`; status route bans/unbans the Clerk user so deactivation blocks sign-in and revokes sessions (self-deactivation refused); the `public.users.status` column was added in `20260928040000_add_users_status.sql`*
-- [x] Reports: aggregated queries for charts (concerns by status, events by attendance, lost & found resolution rate), CSV/PDF export — *live aggregates in `admin-reports-page-client.tsx` with CSV export; note PDF export is not implemented*
+- [x] Reports: aggregated queries for charts (concerns by status, events by attendance, lost & found resolution rate), CSV/PDF export — *live aggregates in `admin-reports-page-client.tsx` with CSV export; PDF export added 2026-10-02 (jsPDF + jspdf-autotable, dynamically imported on the reports page so it stays out of the main bundle), both formats share the same aggregate rows via the Export dropdown on the reports shell*
 
 ## Phase 4 — Testing (5 items)
 - [ ] Functional testing complete (see `05-TESTING-REPORT.md`)
@@ -114,7 +114,7 @@ Update the checkboxes as you complete each item. Organized by phase — see `09-
 ## Overall Completion
 | Phase | Total Items | Completed | % |
 |---|---|---|---|
-| Setup | 13 | 7 | 54% |
+| Setup | 13 | 11 | 85% |
 | Database & RLS | 9 | 9 | 100% |
 | Frontend Screens | 38 | 38 | 100% |
 | Backend Logic | 8 | 8 | 100% |

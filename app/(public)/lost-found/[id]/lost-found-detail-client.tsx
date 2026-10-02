@@ -27,11 +27,7 @@ export default function LostFoundDetailClient() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!id) {
-      setError("Item ID is missing");
-      setLoading(false);
-      return;
-    }
+    if (!id) return;
     void (async () => {
       const result = await getLostFoundItem(client, id);
       if (result.error) setError(result.error);
@@ -39,6 +35,14 @@ export default function LostFoundDetailClient() {
       setLoading(false);
     })();
   }, [client, id]);
+
+  if (!id) {
+    return (
+      <CampusPage page="lost-detail">
+        <p>Item ID is missing.</p>
+      </CampusPage>
+    );
+  }
 
   if (loading) {
     return (

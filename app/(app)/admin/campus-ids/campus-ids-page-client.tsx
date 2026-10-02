@@ -60,7 +60,6 @@ export default function CampusIdsPage() {
   const [deleteBusy, setDeleteBusy] = useState(false);
 
   const fetchRows = useCallback(async () => {
-    setLoading(true);
     // `seeded_campus_ids_select_all` makes the table public-read; the claimant
     // name is joined from `users` (readable to admins via users_select_admin).
     const { data, error: queryError } = await client
@@ -86,7 +85,9 @@ export default function CampusIdsPage() {
   }, [client]);
 
   useEffect(() => {
-    void fetchRows();
+    void (async () => {
+      await fetchRows();
+    })();
   }, [fetchRows]);
 
   const addId = async () => {

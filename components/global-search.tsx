@@ -36,15 +36,20 @@ export function GlobalSearch({ client }: { client: DbClient }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const pathname = usePathname();
 
+  // Close on navigation: adjust state during render (the React-documented
+  // alternative to a setState-in-effect on pathname changes).
+  const [prevPath, setPrevPath] = useState(pathname);
+  if (prevPath !== pathname) {
+    setPrevPath(pathname);
+    setOpen(false);
+  }
+
   useEffect(() => {
     const needle = debounced.trim();
-    if (needle.length < 2) {
-      setResults([]);
-      setSearching(false);
-      return;
-    }
+    // Below two characters there is nothing to search for; the change handler
+    // already cleared `results`/`searching`, so there is nothing to reset here.
+    if (needle.length < 2) return;
     let cancelled = false;
-    setSearching(true);
     void (async () => {
       const pattern = `%${needle.replace(/[%_]/g, "")}%`;
       const [announcements, events, concerns] = await Promise.all([
@@ -67,8 +72,7 @@ export function GlobalSearch({ client }: { client: DbClient }) {
     };
   }, [debounced, client]);
 
-  // Close on navigation and on outside click.
-  useEffect(() => setOpen(false), [pathname]);
+  // Close on outside click.
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
       if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
@@ -84,7 +88,15 @@ export function GlobalSearch({ client }: { client: DbClient }) {
         className="pl-9"
         placeholder="Search CampusConnect"
         value={query}
-        onChange={(event) => setQuery(event.target.value)}
+        onChange={(event) => {
+          const value = event.target.value;
+          const nextActive = value.trim().length >= 2;
+          setQuery(value);
+          // Keystrokes are event handlers, so the search flags may be synced
+          // here instead of inside the fetch effect.
+          setSearching(nextActive);
+          if (!nextActive) setResults([]);
+        }}
         onFocus={() => results.length > 0 && setOpen(true)}
         onKeyDown={(event) => event.key === "Escape" && setOpen(false)}
         aria-label="Search CampusConnect"

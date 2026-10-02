@@ -28,11 +28,7 @@ export default function ConcernDetailPage() {
   const [replyLoading, setReplyLoading] = useState(false);
 
   const fetchThread = useCallback(async () => {
-    if (!id) {
-      setError("Concern ID is missing");
-      setLoading(false);
-      return;
-    }
+    if (!id) return;
 
     const [concernResult, messageResult] = await Promise.all([
       getConcern(client, id),
@@ -53,7 +49,9 @@ export default function ConcernDetailPage() {
 
   useEffect(() => {
     if (!isLoaded) return;
-    void fetchThread();
+    void (async () => {
+      await fetchThread();
+    })();
   }, [fetchThread, isLoaded]);
 
   const handleReplySubmit = async () => {
@@ -74,6 +72,14 @@ export default function ConcernDetailPage() {
       setReplyLoading(false);
     }
   };
+
+  if (!id) {
+    return (
+      <CampusPage page="concern-detail">
+        <p>Concern ID is missing.</p>
+      </CampusPage>
+    );
+  }
 
   if (loading) {
     return (

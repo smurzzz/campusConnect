@@ -38,11 +38,7 @@ export default function ConcernsPage() {
   );
 
   useEffect(() => {
-    if (!isLoaded) return;
-    if (!user) {
-      setLoading(false);
-      return;
-    }
+    if (!isLoaded || !user) return;
 
     void (async () => {
       const result = await listConcerns(client, { studentId: user.id });
@@ -51,6 +47,10 @@ export default function ConcernsPage() {
       setLoading(false);
     })();
   }, [client, isLoaded, user]);
+
+  // Derived loading flag: keep the skeleton until Clerk has a user (or there
+  // definitively is none), instead of clearing state inside the effect.
+  const showLoading = loading && (!isLoaded || Boolean(user));
 
   const filtered = concerns.filter((row) => {
     if (status && row.status !== status) return false;
@@ -94,7 +94,7 @@ export default function ConcernsPage() {
 
       {error && <div className="mb-5 rounded-md bg-danger-soft p-4 text-sm text-danger">{error}</div>}
 
-      {loading ? (
+      {showLoading ? (
         <div className="space-y-3" aria-busy="true" aria-label="Loading concerns">
           {[0, 1, 2].map((index) => (
             <Skeleton key={index} className="h-16 w-full rounded-md" />

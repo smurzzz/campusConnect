@@ -113,7 +113,7 @@ try {
   }
 
   // 3. Concerns thread (authored by the admin acting as a student proxy).
-  for (const [index, c] of concerns.entries()) {
+  for (const c of concerns) {
     const existing = await rest(`concerns?select=id&subject=eq.${encodeURIComponent(c.subject)}`);
     if (existing.length) { console.log("skip concern:", c.subject); continue; }
     const row = await rest("concerns", {

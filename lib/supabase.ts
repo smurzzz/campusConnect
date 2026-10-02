@@ -887,7 +887,7 @@ export async function claimCampusId(id: string, userId: string) {
 // Storage
 export async function uploadConcernAttachment(file: File): Promise<string> {
   const filename = `${Date.now()}-${file.name.replace(/\s+/g, '-')}`
-  const { data, error } = await supabase
+  const { error } = await supabase
     .storage
     .from('concern-attachments')
     .upload(filename, file)
@@ -993,7 +993,7 @@ export async function createEventUpdateNotification(eventId: string, excludeUser
     if (registrationsError) throw registrationsError
 
     // Get user IDs from registrations
-    const userIds = registrations.map((r: any) => r.student_id)
+    const userIds = registrations.map((r) => r.student_id)
 
     // Fetch user details for these IDs
     const { data: users, error: usersError } = await supabase

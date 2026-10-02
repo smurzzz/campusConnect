@@ -100,12 +100,8 @@ export default function AdminReportsPage() {
     })();
   }, [client]);
 
-  const exportCsv = () => {
-    if (concernsByStatus.length === 0 && eventsAttendance.length === 0 && lostFoundResolution.length === 0) {
-      toast.info("No report data to export yet");
-      return;
-    }
-
+  /** The same aggregate rows feed both export formats. */
+  const buildRows = (): string[][] => {
     const rows: string[][] = [["Report", "Item", "Count", "Total"]];
     for (const bucket of concernsByStatus) {
       rows.push(["Concerns by status", bucket.status, String(bucket.count), String(concernsByStatus.reduce((sum, b) => sum + b.count, 0))]);
@@ -117,9 +113,41 @@ export default function AdminReportsPage() {
     for (const bucket of lostFoundResolution) {
       rows.push(["Lost & found resolution", bucket.status, String(bucket.count), String(itemTotal)]);
     }
+    return rows;
+  };
 
-    downloadCsv(`campusconnect-reports-${new Date().toISOString().slice(0, 10)}.csv`, rows);
-    toast.success("Report exported as CSV");
+  const exportReport = async (format: "csv" | "pdf") => {
+    if (concernsByStatus.length === 0 && eventsAttendance.length === 0 && lostFoundResolution.length === 0) {
+      toast.info("No report data to export yet");
+      return;
+    }
+    const rows = buildRows();
+    const stamp = new Date().toISOString().slice(0, 10);
+
+    if (format === "csv") {
+      downloadCsv(`campusconnect-reports-${stamp}.csv`, rows);
+      toast.success("Report exported as CSV");
+      return;
+    }
+
+    // Dynamic import keeps jsPDF out of the initial client bundle and away
+    // from the server render, where it would touch the DOM.
+    const [{ jsPDF }, { autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    doc.setFontSize(16).setFont("helvetica", "bold");
+    doc.text("CampusConnect \u2014 Reports", 40, 48);
+    doc.setFontSize(10).setFont("helvetica", "normal");
+    doc.text(`Generated ${stamp}`, 40, 66);
+    autoTable(doc, {
+      startY: 84,
+      head: [rows[0]],
+      body: rows.slice(1),
+      styles: { fontSize: 9, cellPadding: 6 },
+      headStyles: { fillColor: [30, 41, 59] },
+      alternateRowStyles: { fillColor: [243, 244, 246] },
+    });
+    doc.save(`campusconnect-reports-${stamp}.pdf`);
+    toast.success("Report exported as PDF");
   };
 
   // AdminDashboard owns its AppShell and the export button (via `onExport`) —
@@ -129,7 +157,7 @@ export default function AdminReportsPage() {
       reports
       loading={loading}
       error={error}
-      onExport={exportCsv}
+      onExport={exportReport}
       stats={{
         totalUsers: concernsByStatus.reduce((sum, b) => sum + b.count, 0),
         activeConcerns: (concernsByStatus.find((b) => b.status === "Pending")?.count ?? 0) + (concernsByStatus.find((b) => b.status === "In Progress")?.count ?? 0),

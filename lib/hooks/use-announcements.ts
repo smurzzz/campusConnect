@@ -6,7 +6,6 @@ import { useUser } from "@clerk/nextjs";
 import { useRole } from "@/lib/clerk/use-role";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
-import type { Database } from "@/lib/supabase";
 import {
   ANNOUNCEMENTS_PAGE_SIZE,
   createAnnouncement as createAnnouncementRow,

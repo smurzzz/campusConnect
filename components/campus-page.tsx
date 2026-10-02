@@ -4,13 +4,12 @@ import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  AlertCircle, Archive, ArrowLeft, ArrowRight, Bell, BookOpen, CalendarDays, Camera, Check,
-  CheckCircle2, ChevronDown, CircleHelp, ClipboardList, Download, Eye, EyeOff, FileText,
-  Filter, GraduationCap, LayoutDashboard, LoaderCircle, LockKeyhole, LogOut, MapPin, Menu,
+  AlertCircle, ArrowRight, Bell, CalendarDays, Check,
+  CheckCircle2, Download, Eye,
+  Filter, GraduationCap, LayoutDashboard, LockKeyhole, LogOut, MapPin, Menu,
   Megaphone, MessageSquareText, MoreHorizontal, PackageSearch, PanelLeftClose, PanelLeftOpen, Pencil, Plus,
-  Search, Send, Settings2, ShieldCheck, Sparkles, Trash2, Upload, UserRound,
-  UsersRound, X, Clock3, BarChart3, TrendingUp, CalendarCheck, Mail, Inbox, ImagePlus, KeyRound,
-  LogIn, UserPlus, Loader2,
+  Search, Send, ShieldCheck, Sparkles, Upload, UserRound,
+  UsersRound, X, Clock3, BarChart3, TrendingUp, CalendarCheck, Inbox, ImagePlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useUser, useAuth, useClerk } from "@clerk/nextjs";
@@ -18,9 +17,9 @@ import { useRole } from "@/lib/clerk/use-role";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { dashboardRouteForRole } from "@/lib/constants/routes";
 import { useNotifications } from "@/lib/hooks/use-notifications";
@@ -29,12 +28,9 @@ import { GlobalSearch } from "@/components/global-search";
 import { supabase } from "@/lib/supabase";
 import type { Database } from "@/lib/supabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { toPublicationLabel, statusTone, ITEM_STATUSES, ITEM_TYPES, type ItemType } from "@/lib/constants/statuses";
 import { AssignConcernDialog as AssignConcernDialogReal } from "@/components/concerns/assign-concern-dialog";
 import { AttendanceBarChart, ResolutionDonut, StatusBarChart } from "@/components/charts/campus-charts";
-import { toPublicationLabel, statusTone, PUBLICATION_STATUSES, ITEM_STATUSES, ITEM_TYPES, type PublicationStatus, type ItemType } from "@/lib/constants/statuses";
-import { ANNOUNCEMENT_CATEGORIES, ANNOUNCEMENT_AUDIENCES } from "@/lib/constants/categories";
-import { useAnnouncementMutations, useAnnouncements } from "@/lib/hooks/use-announcements";
-import { isAnnouncementAudience, isAnnouncementCategory, type AnnouncementDraft, type AnnouncementRow as AnnouncementRecord } from "@/lib/announcements";
 
 type PageKey = string;
 type Role = "student" | "staff" | "admin";
@@ -44,7 +40,6 @@ type Status = "Pending" | "In Progress" | "Resolved" | "Urgent" | "Published" | 
 /** Row shapes as they come back from Supabase, so list views stay typed. */
 type AnnouncementRow = Database["public"]["Tables"]["announcements"]["Row"];
 type EventRow = Database["public"]["Tables"]["events"]["Row"];
-type ConcernRow = Database["public"]["Tables"]["concerns"]["Row"];
 type LostFoundRow = Database["public"]["Tables"]["lost_found_items"]["Row"];
 
 /**
@@ -117,7 +112,7 @@ export function AnnouncementCards({ items, student=false, emptyText="Announcemen
   if (!items || items.length === 0) return <EmptyState title="No announcements yet" text={emptyText}/>;
   return <div className="space-y-3">{items.map((a,i)=><article key={a.id} className="content-card group animate-rise" style={{animationDelay:`${i*60}ms`}}>
     {a.image_url && (
-      // eslint-disable-next-line @next/next/no-img-element -- user-uploaded CMS image from Supabase Storage, not a Next-optimized local asset
+      // user-uploaded CMS image from Supabase Storage, not a Next-optimized local asset
       <img src={a.image_url} alt="" className="-mx-5 -mt-5 mb-4 h-56 w-[calc(100%_+_2.5rem)] rounded-t-[var(--radius-lg)] object-cover" loading="lazy"/>
     )}
     <div className="flex flex-wrap items-center gap-2"><span className="category-badge">{a.category}</span><span className="text-xs text-muted-foreground">{formatAnnouncementDate(a.created_at)}</span>{student&&<StatusBadge status={toPublicationLabel(a.status)}/>}</div><h2 className="mt-3 text-lg font-semibold group-hover:text-primary">{a.title}</h2><p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">{excerptFrom(a.body)}</p><Link href={`/announcements/${a.id}${student?"?view=student":""}`} className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary">Read more <ArrowRight/></Link></article>)}</div>;
@@ -125,7 +120,7 @@ export function AnnouncementCards({ items, student=false, emptyText="Announcemen
 export function EventCards({ items, register=false }: { items?: EventRow[]; register?: boolean }) {
   if (!items || items.length === 0) return <EmptyState title="No events yet" text="New campus events will appear here once they are published."/>;
   return <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{items.map((e,i)=>{const startsAt=new Date(e.start_time);return <article key={e.id} className="event-card animate-rise" style={{animationDelay:`${i*70}ms`}}><div className={cn("relative flex h-40 items-end justify-end p-5",e.cover_image_url?"":"",EVENT_COVER_TONES[i%3])}>{e.cover_image_url&&(
-    // eslint-disable-next-line @next/next/no-img-element -- user-uploaded CMS image from Supabase Storage, not a Next-optimized local asset
+    // user-uploaded CMS image from Supabase Storage, not a Next-optimized local asset
     <img src={e.cover_image_url} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy"/>
   )}<span className={cn("relative rounded-md px-3 py-2 text-center text-xs font-bold shadow-sm",e.cover_image_url?"bg-background/90 text-foreground backdrop-blur-sm":"bg-background/90 text-foreground")}>{startsAt.toLocaleDateString(undefined,{month:"short"})}<strong className="block text-xl text-primary">{startsAt.getDate()}</strong></span></div><div className="p-5"><span className="category-badge">{e.category}</span><h2 className="mt-3 text-lg font-semibold">{e.title}</h2><div className="mt-4 space-y-2 text-sm text-muted-foreground"><p className="flex items-center gap-2"><CalendarDays/>{startsAt.toLocaleString()}</p><p className="flex items-center gap-2"><MapPin/>{e.location}</p>{register&&e.capacity!=null&&<p className="flex items-center gap-2"><UsersRound/>{e.capacity} spots</p>}</div><Button className="mt-5 w-full" variant={register?"default":"outline"} asChild><Link href={`/events/${e.id}${register?"?view=student":""}`}>{register?"Register":"View details"}</Link></Button></div></article>})}</div>;
 }
@@ -258,17 +253,26 @@ export function ManagementTable({kind, data}:{kind:"announcements"|"events"|"los
   });
   return <div className="table-shell">{rows.map((r,i)=>{ const [name = "", detail = "", date = "", status = "Open"]: string[] = r; return <div key={i} className="data-grid-row md:grid-cols-[1.8fr_1fr_1fr_1fr_auto]"><div className="flex items-center gap-3">{kind==="users"&&<span className="grid size-9 place-items-center rounded-full bg-primary-soft font-semibold text-primary">{name.split(" ").map((x: string)=>x.charAt(0)).join("")}</span>}<span className="font-semibold">{name}</span></div><div>{detail}</div><div>{date}</div><div><StatusBadge status={status}/></div><div className="flex gap-1">{kind==="users"?<ChangeRoleDialog name={name} currentRole={date}/>:<Button variant="ghost" size="icon" aria-label={`Edit ${name}`} onClick={()=>toast("Edit panel opened")}><Pencil/></Button>}<Button variant="ghost" size="icon" aria-label={`More options for ${name}`} onClick={()=>toast("More actions opened")}><MoreHorizontal/></Button></div></div>})}</div>;
 }
-function MiniChart({type="bar"}:{type?:"bar"|"line"|"donut"}) { const vals=[42,64,48,76,58,88,72]; return <div className="mt-5 flex h-44 items-end gap-3 border-b border-border px-2 pb-0">{type==="donut"?<div className="mx-auto mb-5 grid size-36 place-items-center rounded-full bg-chart-ring"><div className="grid size-20 place-items-center rounded-full bg-card text-center"><span><strong className="block text-2xl">78%</strong><small className="text-muted-foreground">resolved</small></span></div></div>:vals.map((v,i)=><div key={i} className="flex h-full flex-1 items-end"><span className={cn("w-full rounded-t-sm",type==="line"?"bg-accent":"bg-primary/75")} style={{height:`${v}%`}}/></div>)}</div>; }
 //
 // `AdminDashboard` owns its AppShell: it must be rendered directly, never as
 // a child of <CampusPage>, or the page ends up with two stacked sidebars.
-export function AdminDashboard({reports=false, stats, loading=false, error, onExport, concernsByStatus, eventsAttendance, lostFoundResolution}:{reports?:boolean; stats?:{totalUsers:number; activeConcerns:number; upcomingEvents:number; openItems:number}; loading?:boolean; error?:string|null; onExport?:()=>void; concernsByStatus?:Array<{status:string; count:number}>; eventsAttendance?:Array<{title:string; capacity:number; event_registrations:Array<{count:number}>}>; lostFoundResolution?:Array<{status:string; count:number}>}) {
+export function AdminDashboard({reports=false, stats, loading=false, error, onExport, concernsByStatus, eventsAttendance, lostFoundResolution}:{reports?:boolean; stats?:{totalUsers:number; activeConcerns:number; upcomingEvents:number; openItems:number}; loading?:boolean; error?:string|null; onExport?:(format:"csv"|"pdf")=>void; concernsByStatus?:Array<{status:string; count:number}>; eventsAttendance?:Array<{title:string; capacity:number; event_registrations:Array<{count:number}>}>; lostFoundResolution?:Array<{status:string; count:number}>}) {
   const { user } = useUser();
   const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Welcome";
   const greeting = `Good day, ${displayName.split(" ")[0]}`;
   if (loading) return <AppShell role="admin" title={reports?"Reports & insights":greeting} subtitle={reports?"Preparing your campus insights…":"Here’s what’s happening across CampusConnect today."}><div className="section-panel p-0 py-8 text-center text-muted-foreground">Loading…</div></AppShell>;
   if (error) return <AppShell role="admin" title={reports?"Reports & insights":greeting} subtitle={reports?"Something went wrong while loading your insights.":"Here’s what’s happening across CampusConnect today."}><div className="rounded-md bg-danger-soft p-4 text-sm text-danger">{error}</div></AppShell>;
-  return <AppShell role="admin" title={reports?"Reports & insights":greeting} subtitle={reports?"Understand service performance across the campus.":"Here’s what’s happening across CampusConnect today."} actions={reports&&onExport?<Button onClick={onExport}><Download/>Export CSV/PDF</Button>:undefined}>
+  return <AppShell role="admin" title={reports?"Reports & insights":greeting} subtitle={reports?"Understand service performance across the campus.":"Here’s what’s happening across CampusConnect today."} actions={reports&&onExport?(
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button><Download/>Export</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={()=>void onExport("csv")}>Export as CSV</DropdownMenuItem>
+          <DropdownMenuItem onSelect={()=>void onExport("pdf")}>Export as PDF</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ):undefined}>
     <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <StatCard label={reports?"Concerns resolved":"Total users"} value={stats?.totalUsers ?? 0} icon={UsersRound} trend="8.4% this month"/>
       <StatCard label="Active concerns" value={stats?.activeConcerns ?? 0} icon={MessageSquareText}/>
@@ -313,34 +317,33 @@ function Landing() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchAnnouncements();
+    const fetchAnnouncements = async () => {
+      try {
+        // Published only: the landing page is public, and the RLS published-only
+        // policy is what actually enforces this.
+        const { data, error } = await supabase
+          .from('announcements')
+          .select('id, title, category, body, created_at')
+          .eq('status', 'published')
+          .order('created_at', { ascending: false })
+          .limit(3);
+
+        if (error) throw error;
+        setAnnouncementsData((data ?? []).map((a) => ({
+          id: a.id,
+          title: a.title,
+          category: a.category,
+          excerpt: excerptFrom(a.body),
+          date: formatAnnouncementDate(a.created_at),
+        })));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load announcements');
+      } finally {
+        setLoading(false);
+      }
+    };
+    void fetchAnnouncements();
   }, []);
-
-  const fetchAnnouncements = async () => {
-    try {
-      // Published only: the landing page is public, and the RLS published-only
-      // policy is what actually enforces this.
-      const { data, error } = await supabase
-        .from('announcements')
-        .select('id, title, category, body, created_at')
-        .eq('status', 'published')
-        .order('created_at', { ascending: false })
-        .limit(3);
-
-      if (error) throw error;
-      setAnnouncementsData((data ?? []).map((a) => ({
-        id: a.id,
-        title: a.title,
-        category: a.category,
-        excerpt: excerptFrom(a.body),
-        date: formatAnnouncementDate(a.created_at),
-      })));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load announcements');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (loading) return <div className="bg-background"><PublicNav/><main><div className="min-h-screen flex items-center justify-center">Loading...</div></main></div>;
   if (error) return <div className="bg-background"><PublicNav/><main><div className="min-h-screen flex items-center justify-center">Error: {error}</div></main></div>;
@@ -353,36 +356,35 @@ function PublicList({eventsPage=false}:{eventsPage?:boolean}) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchData();
-  }, [eventsPage]);
+    const fetchData = async () => {
+      try {
+        if (eventsPage) {
+          // Fetch events
+          const { data: eventData, error } = await supabase
+            .from('events')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-  const fetchData = async () => {
-    try {
-      if (eventsPage) {
-        // Fetch events
-        const { data: eventData, error } = await supabase
-          .from('events')
-          .select('*')
-          .order('created_at', { ascending: false });
+          if (error) throw error;
+          setData(eventData);
+        } else {
+          // Fetch announcements
+          const { data: announcementData, error } = await supabase
+            .from('announcements')
+            .select('*')
+            .order('created_at', { ascending: false });
 
-        if (error) throw error;
-        setData(eventData);
-      } else {
-        // Fetch announcements
-        const { data: announcementData, error } = await supabase
-          .from('announcements')
-          .select('*')
-          .order('created_at', { ascending: false });
-
-        if (error) throw error;
-        setData(announcementData);
+          if (error) throw error;
+          setData(announcementData);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load data');
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    void fetchData();
+  }, [eventsPage]);
 
   if (loading) return <div className="min-h-screen"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-12 lg:px-8"><div className="min-h-screen flex items-center justify-center">Loading...</div></main></div>;
   if (error) return <div className="min-h-screen"><PublicNav/><main className="mx-auto max-w-7xl px-5 py-12 lg:px-8"><div className="min-h-screen flex items-center justify-center">Error: {error}</div></main></div>;
@@ -509,7 +511,7 @@ export function LostFound({ items }: { items?: LostFoundRow[] }) {
             >
               <div className="relative grid h-44 place-items-center bg-muted">
                 {x.photo_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element -- user-uploaded photo from Supabase Storage, not a Next-optimized local asset
+                  // user-uploaded photo from Supabase Storage, not a Next-optimized local asset
                   <img src={x.photo_url} alt={x.name} className="absolute inset-0 h-full w-full object-cover" loading="lazy" />
                 ) : (
                   <PackageSearch className="size-12 text-muted-foreground" />
@@ -694,7 +696,7 @@ function CreateDialog({kind}:{kind:"announcements"|"events"}) {
           status: publish ? "Published" : "Draft"
         };
 
-        const { data, error } = await supabase.from('events').insert(eventData).select().single();
+        const { error } = await supabase.from('events').insert(eventData).select().single();
         if (error) throw error;
 
         toast.success(`${draft ? "Event saved as draft" : "Event published!"}`);
@@ -710,7 +712,7 @@ function CreateDialog({kind}:{kind:"announcements"|"events"}) {
           created_by: user.id
         };
 
-        const { data, error } = await supabase.from('announcements').insert(announcementData).select().single();
+        const { error } = await supabase.from('announcements').insert(announcementData).select().single();
         if (error) throw error;
 
         toast.success(`${draft ? "Announcement saved as draft" : "Announcement published!"}`);
@@ -849,34 +851,33 @@ function Registrants() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchRegistrants();
+    const fetchRegistrants = async () => {
+      try {
+        // For now, we'll get registrants for a specific event (Innovation Week)
+        // In a real app, this might be parameterized or we might show registrants for all events
+        const { data, error } = await supabase
+          .from('event_registrations')
+          .select(`
+            id,
+            registered_at,
+            student:users!event_registrations_student_id_fkey (
+              full_name,
+              email
+            )
+          `)
+          .eq('event_id', 'innovation-week-2026') // This would need to be the actual event ID
+          .order('registered_at', { ascending: true });
+
+        if (error) throw error;
+        setRegistrants(data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load registrants');
+      } finally {
+        setLoading(false);
+      }
+    };
+    void fetchRegistrants();
   }, []);
-
-  const fetchRegistrants = async () => {
-    try {
-      // For now, we'll get registrants for a specific event (Innovation Week)
-      // In a real app, this might be parameterized or we might show registrants for all events
-      const { data, error } = await supabase
-        .from('event_registrations')
-        .select(`
-          id,
-          registered_at,
-          student:users!event_registrations_student_id_fkey (
-            full_name,
-            email
-          )
-        `)
-        .eq('event_id', 'innovation-week-2026') // This would need to be the actual event ID
-        .order('registered_at', { ascending: true });
-
-      if (error) throw error;
-      setRegistrants(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load registrants');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   if (loading) return <CampusPage page="registrants" />;
   if (error) return <CampusPage page="registrants" >Error loading registrants: {error}</CampusPage>;
@@ -885,7 +886,7 @@ function Registrants() {
     <AppShell role="admin" title="Innovation Week registrants" subtitle={`${registrants.length} of 60 seats filled.`} actions={<Button onClick={()=>toast.success("Registrant list downloaded")}><Download/>Export list</Button>}>
       <Filters search="Search registered students" extra={false}/>
       <div className="table-shell">
-        {registrants.map((reg, i)=><div className="data-grid-row md:grid-cols-3" key={reg.id}>
+        {registrants.map((reg)=><div className="data-grid-row md:grid-cols-3" key={reg.id}>
           <strong>{reg.student?.[0]?.full_name}</strong>
           <span>{reg.student?.[0]?.email}</span>
           <span>{new Date(reg.registered_at).toLocaleDateString()}</span>
@@ -894,7 +895,7 @@ function Registrants() {
     </AppShell>
   );
 }
-function MyEvents(){const [rows,setRows]=useState<EventRow[]>([]);const [loading,setLoading]=useState(true);const {user}=useUser();useEffect(()=>{if(!user){setLoading(false);return}void (async()=>{try{const {data,error}=await supabase.from("events").select("id, title, description, category, location, start_time, end_time, capacity, cover_image_url, created_by, created_at").eq("created_by",user.id).order("start_time",{ascending:true});if(error)throw error;setRows(data??[])}catch{setRows([])}finally{setLoading(false)}})()},[user]);if(loading)return <AppShell title="My events" subtitle="Review and manage your registrations."><div className="section-panel p-0 py-8 text-center text-muted-foreground">Loading your events…</div></AppShell>;if(!rows.length)return <AppShell title="My events" subtitle="Review and manage your registrations." actions={<Button asChild><Link href="/events"><Plus/>Browse events</Link></Button>}><EmptyState title="You're not registered for any events" text="Browse campus events and register for the ones you want to attend."/></AppShell>;return <AppShell title="My events" subtitle="Review and manage your registrations."><div className="space-y-4">{rows.map((e,i)=>{const startsAt=new Date(e.start_time);const past=startsAt.getTime()<Date.now();return <div className="content-card flex flex-col justify-between gap-4 sm:flex-row sm:items-center" key={e.id}><div className="flex items-center gap-4"><span className="grid size-14 place-items-center rounded-md bg-primary-soft text-xs font-bold text-primary">{startsAt.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span><div><h2 className="font-bold">{e.title}</h2><p className="mt-1 text-sm text-muted-foreground">{startsAt.toLocaleString()} · {e.location}</p></div></div><div className="flex items-center gap-3"><StatusBadge status={past?"Past":"Upcoming"}/>{!past&&<Button variant="outline" onClick={()=>toast.success("Registration cancelled")}>Cancel registration</Button>}</div></div>})}</div></AppShell>}
+function MyEvents(){const [rows,setRows]=useState<EventRow[]>([]);const [loading,setLoading]=useState(true);const {user}=useUser();const [now]=useState(()=>Date.now());useEffect(()=>{if(!user)return;void (async()=>{try{const {data,error}=await supabase.from("events").select("id, title, description, category, location, start_time, end_time, capacity, cover_image_url, created_by, created_at").eq("created_by",user.id).order("start_time",{ascending:true});if(error)throw error;setRows(data??[])}catch{setRows([])}finally{setLoading(false)}})()},[user]);if(loading&&user)return <AppShell title="My events" subtitle="Review and manage your registrations."><div className="section-panel p-0 py-8 text-center text-muted-foreground">Loading your events…</div></AppShell>;if(!rows.length)return <AppShell title="My events" subtitle="Review and manage your registrations." actions={<Button asChild><Link href="/events"><Plus/>Browse events</Link></Button>}><EmptyState title="You're not registered for any events" text="Browse campus events and register for the ones you want to attend."/></AppShell>;return <AppShell title="My events" subtitle="Review and manage your registrations."><div className="space-y-4">{rows.map((e)=>{const startsAt=new Date(e.start_time);const past=startsAt.getTime()<now;return <div className="content-card flex flex-col justify-between gap-4 sm:flex-row sm:items-center" key={e.id}><div className="flex items-center gap-4"><span className="grid size-14 place-items-center rounded-md bg-primary-soft text-xs font-bold text-primary">{startsAt.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span><div><h2 className="font-bold">{e.title}</h2><p className="mt-1 text-sm text-muted-foreground">{startsAt.toLocaleString()} · {e.location}</p></div></div><div className="flex items-center gap-3"><StatusBadge status={past?"Past":"Upcoming"}/>{!past&&<Button variant="outline" onClick={()=>toast.success("Registration cancelled")}>Cancel registration</Button>}</div></div>})}</div></AppShell>}
 function AccessDenied(){return <div className="grid min-h-screen place-items-center bg-app px-5"><div className="max-w-md text-center"><span className="mx-auto grid size-20 place-items-center rounded-full bg-danger-soft text-danger"><LockKeyhole className="size-9"/></span><h1 className="mt-6 text-3xl font-bold">Access denied</h1><p className="mt-3 text-muted-foreground">Your account doesn’t have permission to view this area. Return to your dashboard to continue.</p><Button className="mt-7" asChild><Link href="/dashboard">Back to dashboard</Link></Button></div></div>}
 /**
  * Shell configuration for routes that supply their own body via `children`

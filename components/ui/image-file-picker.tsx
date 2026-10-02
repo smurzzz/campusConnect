@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type InputHTMLAttributes } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Camera, ImageIcon, Paperclip, X } from "lucide-react";
 
 import { Label } from "@/components/ui/label";
