@@ -37,12 +37,11 @@ type SeededRow = {
   claimant_name: string | null;
 };
 
-const CAMPUS_ID_PATTERN = /^NU-?\d{4,8}$/i;
+const CAMPUS_ID_PATTERN = /^CA\d{1,8}$/i;
 
 function normalizeId(value: string): string {
-  const upper = value.trim().toUpperCase();
-  // Accept "NU12345678" without the dash; store canonical "NU-…".
-  return upper.startsWith("NU-") ? upper : `NU-${upper.slice(2)}`;
+  // Store the canonical no-dash student number ("ca-20240001" → "CA20240001").
+  return value.trim().toUpperCase().replace(/-/g, "");
 }
 
 export default function CampusIdsPage() {
@@ -92,8 +91,8 @@ export default function CampusIdsPage() {
 
   const addId = async () => {
     const candidate = newId.trim();
-    if (!CAMPUS_ID_PATTERN.test(candidate.replace(/\s+/g, ""))) {
-      toast.error("Campus ID must look like NU-20240001 (NU + 4–8 digits)");
+    if (!CAMPUS_ID_PATTERN.test(normalizeId(candidate.replace(/\s+/g, "")))) {
+      toast.error("Campus ID must look like CA20240001 (CA + 1–8 digits)");
       return;
     }
     setAdding(true);
@@ -185,10 +184,10 @@ export default function CampusIdsPage() {
           <DialogHeader>
             <DialogTitle>Add a Campus ID</DialogTitle>
             <DialogDescription>
-              Format: NU followed by 4–8 digits (e.g. NU-20240001). The ID becomes claimable at sign-up immediately.
+              Format: CA followed by 1–8 digits (e.g. CA12 or CA20240001). The ID becomes claimable at sign-up immediately.
             </DialogDescription>
           </DialogHeader>
-          <Input value={newId} onChange={(event) => setNewId(event.target.value)} placeholder="NU-20240006" aria-label="New campus ID" />
+          <Input value={newId} onChange={(event) => setNewId(event.target.value)} placeholder="CA20240006" aria-label="New campus ID" />
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)} disabled={adding}>
               Cancel

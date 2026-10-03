@@ -9,7 +9,7 @@ const claimSchema = z.object({
     .string()
     .trim()
     .min(1, 'Campus ID is required')
-    .regex(/^NU-?\d{4,8}$/i, 'Campus ID must look like NU-20240001')
+    .regex(/^CA\d{1,8}$/i, 'Campus ID must look like CA20240001')
     .transform((value) => value.toUpperCase()),
 })
 

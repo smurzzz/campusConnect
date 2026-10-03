@@ -43,7 +43,7 @@ const event = process.env.WEBHOOK_DELETE_ID
     primary_email_address_id: "idn_test_primary",
     email_addresses: [{ id: "idn_test_primary", email_address: "webhook-smoke-test@example.com" }],
     public_metadata: {},
-    unsafe_metadata: { campusId: "NU-20240001" },
+    unsafe_metadata: { campusId: "CA20240001" },
   },
 };
 

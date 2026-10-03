@@ -12,7 +12,7 @@ import {
 import { ROLES } from "@/lib/constants/roles";
 import { ACCOUNT_STATUS_VALUES } from "@/lib/constants/statuses";
 
-const campusIdPattern = /^NU-?\d{4,8}$/i;
+const campusIdPattern = /^CA\d{1,8}$/i;
 
 const email = z
   .string()
@@ -29,7 +29,7 @@ const campusId = z
   .string()
   .trim()
   .min(1, "Campus ID is required")
-  .regex(campusIdPattern, "Campus ID must look like NU-20240001")
+  .regex(campusIdPattern, "Campus ID must look like CA20240001")
   .transform((value) => value.toUpperCase());
 
 const optionalAttachment = z

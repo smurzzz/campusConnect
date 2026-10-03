@@ -268,7 +268,7 @@ for (const local of EXTRA_INBOXES) {
 const [student] = await supa(`users?id=eq.${ids.student}&select=campus_id`).catch(() => [[]]);
 if (student && !student.campus_id) {
   const free = await supa("seeded_campus_ids?is_claimed=is.false&select=campus_id&limit=20&order=campus_id");
-  const pick = free.map((r) => r.campus_id).find((v) => /^NU-\d{4,8}$/i.test(v));
+  const pick = free.map((r) => r.campus_id).find((v) => /^CA\d{1,8}$/i.test(v));
   if (pick) {
     await supa(`seeded_campus_ids?campus_id=eq.${encodeURIComponent(pick)}`, {
       method: "PATCH",
@@ -282,7 +282,7 @@ if (student && !student.campus_id) {
     });
     check(`student Campus ID ${pick} claimed`, true);
   } else {
-    check("student Campus ID claim", false, "no unclaimed NU-* id left in seeded_campus_ids");
+    check("student Campus ID claim", false, "no unclaimed CA* id left in seeded_campus_ids");
   }
 } else if (student) {
   check(`student already holds Campus ID ${student.campus_id}`, true);

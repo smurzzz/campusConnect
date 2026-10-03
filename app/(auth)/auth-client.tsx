@@ -511,7 +511,7 @@ function SignInCard() {
         <AuthField
           label={mode === "email" ? "Email" : "Campus ID"}
           type="text"
-          placeholder={mode === "email" ? "you@campus.edu" : "NU-20240001"}
+          placeholder={mode === "email" ? "you@campus.edu" : "CA20240001"}
           icon={mode === "email" ? Mail : UserRound}
           value={identifier}
           onValue={(value) => setIdentifier(mode === "campusId" ? value.toUpperCase() : value)}
@@ -852,7 +852,7 @@ function SignUpCard() {
         <AuthField label="Email" type="email" placeholder="you@campus.edu" icon={Mail} value={values.email} onValue={(value) => set("email", value)} autoComplete="email" inputMode="email">
           <FieldError message={errors.email} />
         </AuthField>
-        <AuthField label="Campus ID" placeholder="NU-20240001" icon={UserRound} value={values.campusId} onValue={(value) => set("campusId", value.toUpperCase())} autoComplete="off">
+        <AuthField label="Campus ID" placeholder="CA20240001" icon={UserRound} value={values.campusId} onValue={(value) => set("campusId", value.toUpperCase())} autoComplete="off">
           <FieldError message={errors.campusId} />
         </AuthField>
         <AuthField label="Password" type="password" placeholder="••••••••" icon={LockKeyhole} value={values.password} onValue={(value) => set("password", value)} autoComplete="new-password">
