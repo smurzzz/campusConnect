@@ -48,16 +48,24 @@ function emptyResult(): AnnouncementListResult {
  * pagination are all pushed into the query, so every visible row comes from
  * the database instead of a client-side slice of a full table fetch.
  */
-export function useAnnouncements(query: AnnouncementQuery = {}) {
+export function useAnnouncements(query: AnnouncementQuery = {}, initial?: AnnouncementListResult) {
   const role = useRole();
   const client = useSupabaseClient();
   const manageAll = query.manageAll === true && role === "admin";
 
+  // Server-provided first page: matches the requestKey the default public
+  // query produces (no filters, page 0), so no skeleton flashes over the
+  // SSR content while the client-side refresh runs.
+  const INITIAL_KEY = JSON.stringify([false, undefined, undefined, "", 0]);
   const [state, setState] = useState<{
     key: string;
     result: AnnouncementListResult;
     error: string | null;
-  }>({ key: "", result: emptyResult(), error: null });
+  }>(() =>
+    initial && initial.error === null
+      ? { key: INITIAL_KEY, result: initial, error: null }
+      : { key: "", result: emptyResult(), error: null },
+  );
 
   const debouncedSearch = useDebouncedValue(query.search ?? "");
   const category = query.category;

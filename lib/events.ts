@@ -278,8 +278,12 @@ export async function listMyRegistrations(
 }
 
 /**
- * Registers the signed-in student. Identity comes from the session, never
- * the form. Returns the human-readable failure so callers can toast it.
+ * Registers the signed-in student. `studentId` must be the Clerk id of the
+ * caller (from `useUser()`) — never a form value. RLS is
+ * `WITH CHECK (student_id = auth.jwt() ->> 'sub')`, so a mismatched id is
+ * rejected by the database even if a caller passes the wrong one; omitting it
+ * entirely left the column NULL and every registration failed as a policy
+ * violation. Returns the human-readable failure so callers can toast it.
  *
  * Capacity is enforced by the `event_capacity_trigger` database trigger, so
  * even a race between two requests cannot overbook the event; this catches
@@ -288,10 +292,15 @@ export async function listMyRegistrations(
 export async function registerForEvent(
   client: DbClient,
   eventId: string,
+  studentId: string | null | undefined,
 ): Promise<{ ok: boolean; error: string | null }> {
+  if (!studentId) {
+    return { ok: false, error: "You must be signed in to register." };
+  }
+
   const { error } = await client
     .from("event_registrations")
-    .insert({ event_id: eventId });
+    .insert({ event_id: eventId, student_id: studentId });
 
   if (!error) return { ok: true, error: null };
 

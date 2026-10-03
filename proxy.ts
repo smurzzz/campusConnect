@@ -1,7 +1,8 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { isRole, type Role } from "@/lib/constants/roles";
+import { roleFromSessionClaims } from "@/lib/clerk/roles";
+import type { Role } from "@/lib/constants/roles";
 import { dashboardRouteForRole, loginRoute, ROLE_GUARDED_PREFIXES, ROUTES } from "@/lib/constants/routes";
 
 /** Routes that always require a session (student, staff and admin areas). */
@@ -35,9 +36,7 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
   if (pathname === "/") {
     const { isAuthenticated, sessionClaims } = await auth();
     if (isAuthenticated) {
-      const role = (sessionClaims as { publicMetadata?: { role?: unknown } } | null)
-        ?.publicMetadata?.role;
-      const dashboard = dashboardRouteForRole(isRole(role) ? role : null);
+      const dashboard = dashboardRouteForRole(roleFromSessionClaims(sessionClaims));
       return NextResponse.redirect(new URL(dashboard, request.url));
     }
     return NextResponse.next();
@@ -58,9 +57,8 @@ export default clerkMiddleware(async (auth, request: NextRequest) => {
   }
 
   if (required) {
-    const role = (sessionClaims as { publicMetadata?: { role?: unknown } } | null)
-      ?.publicMetadata?.role;
-    if (!isRole(role) || !required.includes(role)) {
+    const role = roleFromSessionClaims(sessionClaims);
+    if (!role || !required.includes(role)) {
       return NextResponse.redirect(new URL(ROUTES.ACCESS_DENIED, request.url));
     }
   }

@@ -428,7 +428,7 @@ export function AnnouncementManager() {
       )}
 
       {loading ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading announcements">
+        <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading announcements">
           {[0, 1, 2, 3].map((index) => (
             <Skeleton key={index} className="h-20 w-full rounded-md" />
           ))}

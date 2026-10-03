@@ -83,7 +83,7 @@ export default function AdminConcernsPage() {
       )}
 
       {loading ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading concerns">
+        <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading concerns">
           {[0, 1, 2, 3].map((index) => (
             <Skeleton key={index} className="h-16 w-full rounded-md" />
           ))}

@@ -121,7 +121,15 @@ export function ImageFilePicker({
         className="sr-only"
         accept={accept}
         {...registerProps}
-        onChange={handleChange}
+        onChange={(event) => {
+          // Both handlers must run: ours drives the preview, react-hook-form's
+          // records the FileList. Overriding the spread `onChange` outright
+          // (the previous code) silently dropped the value, so zod saw
+          // `undefined`, the upload branch was skipped and rows saved with a
+          // null photo/attachment URL.
+          handleChange(event);
+          registerProps?.onChange?.(event);
+        }}
         ref={(node) => {
           // Keep react-hook-form's ref AND our own handle for the buttons.
           registerProps?.ref(node);

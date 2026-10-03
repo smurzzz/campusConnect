@@ -67,7 +67,7 @@ export default function EventsPage() {
       )}
 
       {loading ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading events">
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3" role="status" aria-busy="true" aria-label="Loading events">
           {[0, 1, 2, 3, 4, 5].map((index) => (
             <Skeleton key={index} className="h-72 w-full rounded-xl" />
           ))}

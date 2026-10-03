@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   AlertCircle, ArrowRight, Bell, CalendarDays, Check,
@@ -112,16 +113,16 @@ export function AnnouncementCards({ items, student=false, emptyText="Announcemen
   if (!items || items.length === 0) return <EmptyState title="No announcements yet" text={emptyText}/>;
   return <div className="space-y-3">{items.map((a,i)=><article key={a.id} className="content-card group animate-rise" style={{animationDelay:`${i*60}ms`}}>
     {a.image_url && (
-      // user-uploaded CMS image from Supabase Storage, not a Next-optimized local asset
-      <img src={a.image_url} alt="" className="-mx-5 -mt-5 mb-4 h-56 w-[calc(100%_+_2.5rem)] rounded-t-[var(--radius-lg)] object-cover" loading="lazy"/>
+      // Supabase Storage CMS image served through next/image (resized + WebP) — this is the LCP element
+      <Image src={a.image_url} alt="" width={800} height={224} priority={i===0} className="-mx-5 -mt-5 mb-4 h-56 w-[calc(100%_+_2.5rem)] rounded-t-[var(--radius-lg)] object-cover"/>
     )}
     <div className="flex flex-wrap items-center gap-2"><span className="category-badge">{a.category}</span><span className="text-xs text-muted-foreground">{formatAnnouncementDate(a.created_at)}</span>{student&&<StatusBadge status={toPublicationLabel(a.status)}/>}</div><h2 className="mt-3 text-lg font-semibold group-hover:text-primary">{a.title}</h2><p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">{excerptFrom(a.body)}</p><Link href={`/announcements/${a.id}${student?"?view=student":""}`} className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary">Read more <ArrowRight/></Link></article>)}</div>;
 }
 export function EventCards({ items, register=false }: { items?: EventRow[]; register?: boolean }) {
   if (!items || items.length === 0) return <EmptyState title="No events yet" text="New campus events will appear here once they are published."/>;
   return <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{items.map((e,i)=>{const startsAt=new Date(e.start_time);return <article key={e.id} className="event-card animate-rise" style={{animationDelay:`${i*70}ms`}}><div className={cn("relative flex h-40 items-end justify-end p-5",e.cover_image_url?"":"",EVENT_COVER_TONES[i%3])}>{e.cover_image_url&&(
-    // user-uploaded CMS image from Supabase Storage, not a Next-optimized local asset
-    <img src={e.cover_image_url} alt="" className="absolute inset-0 h-full w-full object-cover" loading="lazy"/>
+    // Supabase Storage CMS image served through next/image (resized + WebP)
+    <Image src={e.cover_image_url} alt="" fill priority={i===0} sizes="(min-width:1280px) 33vw, (min-width:768px) 50vw, 100vw" className="object-cover"/>
   )}<span className={cn("relative rounded-md px-3 py-2 text-center text-xs font-bold shadow-sm",e.cover_image_url?"bg-background/90 text-foreground backdrop-blur-sm":"bg-background/90 text-foreground")}>{startsAt.toLocaleDateString(undefined,{month:"short"})}<strong className="block text-xl text-primary">{startsAt.getDate()}</strong></span></div><div className="p-5"><span className="category-badge">{e.category}</span><h2 className="mt-3 text-lg font-semibold">{e.title}</h2><div className="mt-4 space-y-2 text-sm text-muted-foreground"><p className="flex items-center gap-2"><CalendarDays/>{startsAt.toLocaleString()}</p><p className="flex items-center gap-2"><MapPin/>{e.location}</p>{register&&e.capacity!=null&&<p className="flex items-center gap-2"><UsersRound/>{e.capacity} spots</p>}</div><Button className="mt-5 w-full" variant={register?"default":"outline"} asChild><Link href={`/events/${e.id}${register?"?view=student":""}`}>{register?"Register":"View details"}</Link></Button></div></article>})}</div>;
 }
 /** Guest shell, exported for public detail screens that render their own body. */
@@ -311,9 +312,21 @@ function Thread({staff=false}:{staff?:boolean}) { return <AppShell role={staff?"
 function FormField({label,children,note}:{label:string;children:ReactNode;note?:string}) {return <label className="block"><span className="mb-2 block text-sm font-semibold">{label}</span>{children}{note&&<span className="mt-1.5 block text-xs text-muted-foreground">{note}</span>}</label>}
 function FormPage({lost=false}:{lost?:boolean}) { const [mode,setMode]=useState("Lost"); return <AppShell title={lost?"Report a lost or found item":"Submit a concern"} subtitle={lost?"Help reunite campus items with their owners.":"Tell us what happened and the right team will follow up."}><div className="max-w-3xl"><Section title={lost?"Item details":"Concern details"}><form className="space-y-5" onSubmit={e=>{e.preventDefault();toast.success(lost?"Item report submitted":"Concern submitted successfully")}}>{lost&&<div className="segmented">{["Lost","Found"].map(x=><Button type="button" key={x} variant={mode===x?"default":"ghost"} onClick={()=>setMode(x)}>{x}</Button>)}</div>}<div className="grid gap-5 sm:grid-cols-2"><FormField label={lost?"Item name":"Category"}>{lost?<Input placeholder="e.g. Black umbrella"/>:<select className="field-select w-full"><option>Academic</option><option>Facility</option><option>Administrative</option><option>Other</option></select>}</FormField><FormField label={lost?"Category":"Subject"}>{lost?<select className="field-select w-full"><option>Personal item</option><option>Electronics</option><option>Documents</option></select>:<Input placeholder="Briefly summarize your concern"/>}</FormField></div>{lost&&<div className="grid gap-5 sm:grid-cols-2"><FormField label="Location"><Input placeholder="Where was it lost or found?"/></FormField><FormField label="Date"><Input type="date"/></FormField></div>}<FormField label="Description"><Textarea className="min-h-36" placeholder="Add helpful details…"/></FormField><FormField label={lost?"Photo":"Attachment (optional)"} note="PNG, JPG or PDF up to 10 MB"><button type="button" className="upload-zone"><Upload/><span>{lost?"Upload a clear photo":"Drop a file here or browse"}</span></button></FormField><div className="flex justify-end"><Button size="lg" type="submit"><Send/>{lost?"Submit report":"Submit concern"}</Button></div></form></Section></div></AppShell> }
 
-function Landing() {
-  const [announcementsData, setAnnouncementsData] = useState<Array<{ id: string; title: string; category: string | null; excerpt: string; date: string }>>([]);
-  const [loading, setLoading] = useState(true);
+type LandingAnnouncementSeed = { id: string; title: string; category: string | null; body: string; created_at: string };
+
+function Landing({ initialAnnouncements }: { initialAnnouncements?: LandingAnnouncementSeed[] }) {
+  const [announcementsData, setAnnouncementsData] = useState<Array<{ id: string; title: string; category: string | null; excerpt: string; date: string }>>(() =>
+    (initialAnnouncements ?? []).map((a) => ({
+      id: a.id,
+      title: a.title,
+      category: a.category,
+      excerpt: excerptFrom(a.body),
+      date: formatAnnouncementDate(a.created_at),
+    })),
+  );
+  // Server-rendered seed data skips the blocking "Loading..." screen, so the
+  // hero content ships in the initial HTML (Lighthouse LCP).
+  const [loading, setLoading] = useState(initialAnnouncements === undefined);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -898,6 +911,11 @@ function Registrants() {
 function MyEvents(){const [rows,setRows]=useState<EventRow[]>([]);const [loading,setLoading]=useState(true);const {user}=useUser();const [now]=useState(()=>Date.now());useEffect(()=>{if(!user)return;void (async()=>{try{const {data,error}=await supabase.from("events").select("id, title, description, category, location, start_time, end_time, capacity, cover_image_url, created_by, created_at").eq("created_by",user.id).order("start_time",{ascending:true});if(error)throw error;setRows(data??[])}catch{setRows([])}finally{setLoading(false)}})()},[user]);if(loading&&user)return <AppShell title="My events" subtitle="Review and manage your registrations."><div className="section-panel p-0 py-8 text-center text-muted-foreground">Loading your events…</div></AppShell>;if(!rows.length)return <AppShell title="My events" subtitle="Review and manage your registrations." actions={<Button asChild><Link href="/events"><Plus/>Browse events</Link></Button>}><EmptyState title="You're not registered for any events" text="Browse campus events and register for the ones you want to attend."/></AppShell>;return <AppShell title="My events" subtitle="Review and manage your registrations."><div className="space-y-4">{rows.map((e)=>{const startsAt=new Date(e.start_time);const past=startsAt.getTime()<now;return <div className="content-card flex flex-col justify-between gap-4 sm:flex-row sm:items-center" key={e.id}><div className="flex items-center gap-4"><span className="grid size-14 place-items-center rounded-md bg-primary-soft text-xs font-bold text-primary">{startsAt.toLocaleDateString(undefined,{month:"short",day:"numeric"})}</span><div><h2 className="font-bold">{e.title}</h2><p className="mt-1 text-sm text-muted-foreground">{startsAt.toLocaleString()} · {e.location}</p></div></div><div className="flex items-center gap-3"><StatusBadge status={past?"Past":"Upcoming"}/>{!past&&<Button variant="outline" onClick={()=>toast.success("Registration cancelled")}>Cancel registration</Button>}</div></div>})}</div></AppShell>}
 function AccessDenied(){return <div className="grid min-h-screen place-items-center bg-app px-5"><div className="max-w-md text-center"><span className="mx-auto grid size-20 place-items-center rounded-full bg-danger-soft text-danger"><LockKeyhole className="size-9"/></span><h1 className="mt-6 text-3xl font-bold">Access denied</h1><p className="mt-3 text-muted-foreground">Your account doesn’t have permission to view this area. Return to your dashboard to continue.</p><Button className="mt-7" asChild><Link href="/dashboard">Back to dashboard</Link></Button></div></div>}
 /**
+ * 404 screen (functionality doc §37). “Go home” points at `/`, which the
+ * proxy already redirects to the role dashboard for signed-in members.
+ */
+function NotFound(){return <div className="grid min-h-screen place-items-center bg-app px-5"><div className="max-w-md text-center"><span className="mx-auto grid size-20 place-items-center rounded-full bg-warning-soft text-warning"><Search className="size-9"/></span><h1 className="mt-6 text-3xl font-bold">Page not found</h1><p className="mt-3 text-muted-foreground">The page you’re looking for doesn’t exist or may have been moved.</p><Button className="mt-7" asChild><Link href="/">Go home</Link></Button></div></div>}
+/**
  * Shell configuration for routes that supply their own body via `children`
  * instead of rendering one of the built-in page components above.
  */
@@ -916,7 +934,7 @@ const pageShells: Record<string, { role?: Role; title: string; subtitle?: string
  * the page stacks two sidebars. Components that own a shell (AdminDashboard,
  * LostFound, StudentDashboard, …) are rendered directly by their pages.
  */
-export function CampusPage({ page, children }: { page: PageKey; children?: ReactNode }) {
+export function CampusPage({ page, children, initialAnnouncements }: { page: PageKey; children?: ReactNode; initialAnnouncements?: LandingAnnouncementSeed[] }) {
   if (children !== undefined) {
     const shell = pageShells[page] ?? { title: "CampusConnect" };
     return (
@@ -925,6 +943,6 @@ export function CampusPage({ page, children }: { page: PageKey; children?: React
       </AppShell>
     );
   }
-  if(page==="announcements")return <PublicList/>; if(page==="events")return <PublicList eventsPage/>; if(page==="dashboard")return <StudentDashboard/>; if(page==="my-events")return <MyEvents/>; if(page==="concern-new")return <FormPage/>; if(page==="concern-detail")return <Thread/>; if(page==="lost-new")return <FormPage lost/>; if(page==="lost-found")return <LostFound/>; if(page==="profile")return <Profile/>; if(page==="notifications")return <Notifications/>; if(page==="staff-dashboard")return <StaffDashboard/>; if(page==="staff-concerns")return <AppShell role="staff" title="All concerns" subtitle="Review, update, and respond to student concerns."><Filters search="Search concerns"/><ConcernsTable staff/></AppShell>; if(page==="staff-concern-detail")return <Thread staff/>; if(page==="staff-lost")return <StaffLost/>; if(page==="admin-dashboard")return <AdminDashboard/>; if(page==="admin-announcements")return <AdminList kind="announcements"/>; if(page==="admin-events")return <AdminList kind="events"/>; if(page==="admin-concerns")return <AdminList kind="concerns"/>; if(page==="admin-lost")return <AdminList kind="lost"/>; if(page==="admin-users")return <AdminList kind="users"/>; if(page==="registrants")return <Registrants/>; if(page==="reports")return <AdminDashboard reports/>; if(page==="denied")return <AccessDenied/>; if(page==="concerns")return <AppShell title="My concerns" subtitle="Track every request from submission to resolution." actions={<Button asChild><Link href="/concerns/new"><Plus/>Submit concern</Link></Button>}><Filters search="Search my concerns"/><ConcernsTable/></AppShell>;
-  return <Landing/>;
+  if(page==="announcements")return <PublicList/>; if(page==="events")return <PublicList eventsPage/>; if(page==="dashboard")return <StudentDashboard/>; if(page==="my-events")return <MyEvents/>; if(page==="concern-new")return <FormPage/>; if(page==="concern-detail")return <Thread/>; if(page==="lost-new")return <FormPage lost/>; if(page==="lost-found")return <LostFound/>; if(page==="profile")return <Profile/>; if(page==="notifications")return <Notifications/>; if(page==="staff-dashboard")return <StaffDashboard/>; if(page==="staff-concerns")return <AppShell role="staff" title="All concerns" subtitle="Review, update, and respond to student concerns."><Filters search="Search concerns"/><ConcernsTable staff/></AppShell>; if(page==="staff-concern-detail")return <Thread staff/>; if(page==="staff-lost")return <StaffLost/>; if(page==="admin-dashboard")return <AdminDashboard/>; if(page==="admin-announcements")return <AdminList kind="announcements"/>; if(page==="admin-events")return <AdminList kind="events"/>; if(page==="admin-concerns")return <AdminList kind="concerns"/>; if(page==="admin-lost")return <AdminList kind="lost"/>; if(page==="admin-users")return <AdminList kind="users"/>; if(page==="registrants")return <Registrants/>; if(page==="reports")return <AdminDashboard reports/>; if(page==="denied")return <AccessDenied/>; if(page==="not-found")return <NotFound/>; if(page==="concerns")return <AppShell title="My concerns" subtitle="Track every request from submission to resolution." actions={<Button asChild><Link href="/concerns/new"><Plus/>Submit concern</Link></Button>}><Filters search="Search my concerns"/><ConcernsTable/></AppShell>;
+  return <Landing initialAnnouncements={initialAnnouncements}/>;
 }

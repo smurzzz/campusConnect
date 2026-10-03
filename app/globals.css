@@ -123,6 +123,11 @@
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--color-muted-foreground);
+  /* WCAG 2.2 target size: keep header targets ≥ 24px tall */
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.5rem;
+  padding-block: 0.25rem;
   &:hover {
     color: var(--color-primary);
   }
@@ -726,6 +731,11 @@ button:has(> .lucide-bell):hover .lucide-bell {
 input,
 textarea,
 select,
+/* WCAG 2.2 target size — compact header buttons and selects stay ≥ 24px */
+[data-slot="button"],
+.field-select {
+  min-height: 1.5rem;
+}
 .field-select {
   transition:
     border-color 0.2s,

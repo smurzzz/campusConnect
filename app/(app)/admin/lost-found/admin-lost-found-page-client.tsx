@@ -76,7 +76,7 @@ export default function AdminLostFoundPage() {
       )}
 
       {loading ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading reports">
+        <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading reports">
           {[0, 1, 2, 3].map((index) => (
             <Skeleton key={index} className="h-16 w-full rounded-md" />
           ))}

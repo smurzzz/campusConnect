@@ -81,7 +81,7 @@ export default function StaffLostFoundPage() {
       )}
 
       {loading ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading items">
+        <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading items">
           {[0, 1, 2, 3].map((index) => (
             <Skeleton key={index} className="h-16 w-full rounded-md" />
           ))}

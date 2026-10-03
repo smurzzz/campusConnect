@@ -53,7 +53,7 @@ export default function MyEventsPage() {
       )}
 
       {loading ? (
-        <div className="space-y-4" aria-busy="true" aria-label="Loading your events">
+        <div className="space-y-4" role="status" aria-busy="true" aria-label="Loading your events">
           {[0, 1, 2].map((index) => (
             <Skeleton key={index} className="h-28 w-full rounded-xl" />
           ))}

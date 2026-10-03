@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ANNOUNCEMENT_CATEGORIES } from "@/lib/constants/categories";
 import { ALL_OPTION, PUBLICATION_STATUS_VALUES, type PublicationStatus } from "@/lib/constants/statuses";
 import { useAnnouncements } from "@/lib/hooks/use-announcements";
+import type { AnnouncementListResult } from "@/lib/announcements";
 
 const ALL_CATEGORIES = [ALL_OPTION, ...ANNOUNCEMENT_CATEGORIES] as const;
 
@@ -22,6 +23,8 @@ export type AnnouncementListProps = {
   /** Renders the publish/draft chip next to each row. */
   showStatus?: boolean;
   emptyText?: string;
+  /** Server-fetched first page so the list is present in the SSR HTML. */
+  initial?: AnnouncementListResult;
 };
 
 /**
@@ -36,6 +39,7 @@ export function AnnouncementList({
   manageAll = false,
   showStatus = false,
   emptyText = "Announcements will appear here once they are published.",
+  initial,
 }: AnnouncementListProps) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>(ALL_OPTION);
@@ -48,7 +52,7 @@ export function AnnouncementList({
     category,
     status,
     page,
-  });
+  }, initial);
 
   // Any filter change invalidates the current offset.
   const applyCategory = (value: string) => {
@@ -118,7 +122,7 @@ export function AnnouncementList({
       )}
 
       {loading ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading announcements">
+        <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading announcements">
           {[0, 1, 2].map((index) => (
             <Skeleton key={index} className="h-28 w-full rounded-md" />
           ))}

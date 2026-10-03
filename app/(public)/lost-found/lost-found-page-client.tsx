@@ -25,7 +25,7 @@ export default function LostFoundPage() {
   if (loading) {
     return (
       <CampusPage page="lost-found">
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true" aria-label="Loading items">
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4" role="status" aria-busy="true" aria-label="Loading items">
           {[0, 1, 2, 3].map((index) => (
             <Skeleton key={index} className="h-64 w-full rounded-xl" />
           ))}

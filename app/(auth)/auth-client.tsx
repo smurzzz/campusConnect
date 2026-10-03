@@ -133,7 +133,7 @@ function CenteredSpinner({ label = "Loading…" }: { label?: string }) {
 
 function AuthCard({ children }: { children: ReactNode }) {
   return (
-    <div className="auth-bg flex min-h-screen flex-col">
+    <main className="auth-bg flex min-h-screen flex-col">
       <div className="px-5 pt-5 sm:px-8">
         <Brand />
       </div>
@@ -150,7 +150,7 @@ function AuthCard({ children }: { children: ReactNode }) {
           <div id="clerk-captcha" />
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -295,6 +295,9 @@ function SignInCard() {
   const [mode, setMode] = useState<"email" | "campusId">("email");
   const [errors, setErrors] = useState<FieldErrors>({});
   const [busy, setBusy] = useState(false);
+  // Device Trust (Clerk's new-device check) swaps the form for a code screen.
+  const [awaitingDeviceCode, setAwaitingDeviceCode] = useState(false);
+  const [deviceCode, setDeviceCode] = useState("");
 
   const returnTo = params.get("redirect_url");
   const alreadySignedIn = Boolean(user);
@@ -371,8 +374,32 @@ function SignInCard() {
       if (signIn.status === "needs_first_factor") {
         unwrap(await signIn.password({ password }));
       }
+      // Device Trust: the password was right but this browser is a "new
+      // device", so Clerk wants its emailed second factor before it trusts
+      // the sign-in. Collect that code and finalize below.
+      if (signIn.status === "needs_client_trust") {
+        const emailCodeFactor = signIn.supportedSecondFactors?.find(
+          (factor) => factor.strategy === "email_code",
+        );
+        if (!emailCodeFactor) {
+          setErrors({
+            password: "This sign-in needs a verification step this app can't deliver. Contact your administrator.",
+          });
+          setBusy(false);
+          return;
+        }
+        unwrap(await signIn.mfa.sendEmailCode());
+        setAwaitingDeviceCode(true);
+        setBusy(false);
+        return;
+      }
+      if (signIn.status === "needs_second_factor") {
+        setErrors({ password: "This account requires multi-factor authentication, which isn't enabled for this app yet." });
+        setBusy(false);
+        return;
+      }
       if (signIn.status !== "complete") {
-        setErrors({ password: "Additional verification is required for this account." });
+        setErrors({ password: "We couldn't finish signing you in. Please try again." });
         setBusy(false);
         return;
       }
@@ -388,6 +415,95 @@ function SignInCard() {
     setErrors({});
     setIdentifier("");
   };
+
+  const verifyDevice = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    setErrors({});
+    try {
+      unwrap(await signIn.mfa.verifyEmailCode({ code: deviceCode.trim() }));
+      if (signIn.status !== "complete") {
+        setErrors({ code: "Verification didn't finish. Please try again." });
+        setBusy(false);
+        return;
+      }
+      await finish();
+    } catch (error) {
+      setErrors({ code: describeClerkError(error, "That code didn't match. Check your email and try again.") });
+      setBusy(false);
+    }
+  };
+
+  const resendDeviceCode = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      unwrap(await signIn.mfa.sendEmailCode());
+      toast.success("A new code is on its way.");
+    } catch (error) {
+      setErrors({ code: describeClerkError(error, "Couldn't resend the code. Try again in a moment.") });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (awaitingDeviceCode) {
+    return (
+      <AuthCard>
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">Verify your device</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            We sent a 6-digit code to <strong>{identifier}</strong> to confirm this sign-in from a new device.
+          </p>
+        </div>
+
+        <form className="mt-7 space-y-4" onSubmit={verifyDevice} noValidate>
+          <AuthField
+            label="Verification code"
+            type="text"
+            placeholder="123456"
+            icon={KeyRound}
+            value={deviceCode}
+            onValue={(value) => setDeviceCode(value.replace(/\D/g, "").slice(0, VERIFICATION_CODE_LENGTH))}
+            autoComplete="one-time-code"
+            inputMode="numeric"
+            maxLength={VERIFICATION_CODE_LENGTH}
+          >
+            <FieldError message={errors.code} />
+          </AuthField>
+
+          <Button className="h-11 w-full text-base" type="submit" disabled={busy || deviceCode.length !== VERIFICATION_CODE_LENGTH}>
+            {busy ? (
+              <>
+                <LoaderCircle className="size-4 animate-spin" />
+                Verifying…
+              </>
+            ) : (
+              "Verify and continue"
+            )}
+          </Button>
+        </form>
+
+        <div className="flex items-center justify-between text-sm">
+          <button type="button" className="font-semibold text-primary hover:underline" onClick={() => void resendDeviceCode()} disabled={busy}>
+            Send a new code
+          </button>
+          <button
+            type="button"
+            className="font-semibold text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              setAwaitingDeviceCode(false);
+              setDeviceCode("");
+              setErrors({});
+            }}
+          >
+            Back to sign in
+          </button>
+        </div>
+      </AuthCard>
+    );
+  }
 
   return (
     <AuthCard>
@@ -522,6 +638,21 @@ function SignUpCard() {
     setErrors({});
 
     try {
+      // Spec: catch unknown/claimed Campus IDs inline BEFORE an account is
+      // created — the claim route stays the race-safe backstop afterwards.
+      const check = await fetch("/api/campus-ids/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campusId: parsed.data.campusId }),
+        cache: "no-store",
+      });
+      if (!check.ok) {
+        const payload = (await check.json().catch(() => null)) as { error?: string } | null;
+        setErrors({ campusId: payload?.error ?? "This Campus ID couldn't be verified." });
+        setBusy(false);
+        return;
+      }
+
       // unsafeMetadata survives to the created user (the webhook reads
       // `unsafe_metadata.campusId` from it); Clerk rejects unrecognised
       // publicMetadata on the sign-up resource, so this travels here instead.
@@ -588,6 +719,13 @@ function SignUpCard() {
 
     void (async () => {
       try {
+        // Finalize FIRST: it activates the session, and `/api/campus-ids/claim`
+        // requires an authenticated caller (`auth()` in the route). Claiming
+        // before finalize always failed with 401, leaving every signup's
+        // Campus ID unclaimed.
+        unwrap(await signUp.finalize());
+        toast.success("Account created. Welcome to CampusConnect!");
+
         if (values.campusId) {
           const response = await fetch("/api/campus-ids/claim", {
             method: "POST",
@@ -601,9 +739,6 @@ function SignUpCard() {
             });
           }
         }
-
-        unwrap(await signUp.finalize());
-        toast.success("Account created. Welcome to CampusConnect!");
       } catch (error) {
         console.error("Post-signup finalization failed:", error);
         // The account itself exists; don't trap the user on this screen.

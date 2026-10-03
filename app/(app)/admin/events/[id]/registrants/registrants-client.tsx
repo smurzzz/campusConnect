@@ -114,7 +114,7 @@ export default function RegistrantsClient() {
       )}
 
       {loading ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading registrants">
+        <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading registrants">
           {[0, 1, 2, 3].map((index) => (
             <Skeleton key={index} className="h-14 w-full rounded-md" />
           ))}

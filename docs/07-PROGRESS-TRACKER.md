@@ -97,11 +97,11 @@ Update the checkboxes as you complete each item. Organized by phase — see `09-
 - [x] Reports: aggregated queries for charts (concerns by status, events by attendance, lost & found resolution rate), CSV/PDF export — *live aggregates in `admin-reports-page-client.tsx` with CSV export; PDF export added 2026-10-02 (jsPDF + jspdf-autotable, dynamically imported on the reports page so it stays out of the main bundle), both formats share the same aggregate rows via the Export dropdown on the reports shell*
 
 ## Phase 4 — Testing (5 items)
-- [ ] Functional testing complete (see `05-TESTING-REPORT.md`)
-- [ ] Usability pass complete
-- [ ] Security testing complete (RLS verification, role tampering attempts)
-- [ ] Cross-device responsive testing complete
-- [ ] All critical/high bugs resolved
+- [x] Functional testing complete (see `05-TESTING-REPORT.md`) — *§1 fully populated: auth, announcements, events, concerns, lost & found, notifications, user management — all rows Pass (Google OAuth remains configuration-blocked in the Clerk Dashboard, tracked under Phase 0/5). Includes the empty/loading/error-state audit and the light accessibility pass.*
+- [x] Usability pass complete — *§2 ratings 5/5/5/4/5 plus demo-readiness notes (seed spot-check + `04-DEMO-GUIDE.md` dry run, both Pass; admin CSV/PDF export click-verified)*
+- [x] Security testing complete (RLS verification, role tampering attempts) — *§3: `test-rls-jwt.mjs` 8/8, `test-role-tampering.mjs` 20/20, injection/upload/session-expiry all Pass; bugs #7/#9/#10/#11 fixed via migrations and re-verified*
+- [x] Cross-device responsive testing complete — *375 / 768 / 1280 sweep: zero horizontal scroll and zero overflowing elements on every checked route (recorded in the report's Responsive QA table)*
+- [x] All critical/high bugs resolved — *bug log §5: 11/11 fixed and re-verified; lint 0 problems, `tsc --noEmit` 0 errors, production build green. Lighthouse (prod, desktop): Landing perf 98 / Ann 94, a11y 100, CLS 0 — raw JSON in `docs/evidence/lighthouse/`*
 
 ## Phase 5 — Deployment (6 items)
 - [ ] Domain purchased and connected (campusconnectph.site)
@@ -118,7 +118,7 @@ Update the checkboxes as you complete each item. Organized by phase — see `09-
 | Database & RLS | 9 | 9 | 100% |
 | Frontend Screens | 38 | 38 | 100% |
 | Backend Logic | 8 | 8 | 100% |
-| Testing | 5 | 0 | 0% |
+| Testing | 5 | 5 | 100% |
 | Deployment | 6 | 0 | 0% |
 
 Update the "Completed" and "%" columns as you go — a quick weekly gut-check on where you stand against the 38-screen target.

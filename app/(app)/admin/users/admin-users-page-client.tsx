@@ -137,7 +137,7 @@ export default function AdminUsersPage() {
       )}
 
       {loading ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading users">
+        <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading users">
           {[0, 1, 2, 3].map((index) => (
             <Skeleton key={index} className="h-16 w-full rounded-md" />
           ))}

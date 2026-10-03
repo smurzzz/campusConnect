@@ -410,7 +410,7 @@ export function EventManager() {
       )}
 
       {loading ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Loading events">
+        <div className="space-y-3" role="status" aria-busy="true" aria-label="Loading events">
           {[0, 1, 2, 3].map((index) => (
             <Skeleton key={index} className="h-20 w-full rounded-md" />
           ))}

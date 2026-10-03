@@ -9,15 +9,29 @@ import { isRole, ROLES, type Role } from "@/lib/constants/roles";
  */
 export async function getSessionRole(): Promise<Role | null> {
   const { sessionClaims } = await auth();
-  const role = publicMetadataOf(sessionClaims)?.role;
-  return isRole(role) ? role : null;
+  return roleFromSessionClaims(sessionClaims);
 }
 
-type PublicClaims = { publicMetadata?: Record<string, unknown> } | null | undefined;
-
-/** Clerk types the custom claim loosely; narrow it once, here. */
-function publicMetadataOf(claims: unknown): Record<string, unknown> | undefined {
-  return (claims as PublicClaims)?.publicMetadata;
+/**
+ * The role claim can appear under either key, depending on which session-token
+ * template the Clerk instance is using:
+ *
+ * - `publicMetadata.role` — Clerk's stock template (what `useRole()` reads).
+ * - `metadata.role` — the customized template this project shipped for the
+ *   Supabase third-party auth integration, which surfaces the same object as
+ *   top-level `metadata` (also what `public.jwt_role()` reads in RLS).
+ *
+ * Accepting both keeps the proxy and the admin API routes working on either
+ * template; before this, a customized-template token made every `/admin/*`
+ * navigation and role/status API call return 403 for a signed-in admin.
+ */
+export function roleFromSessionClaims(claims: unknown): Role | null {
+  const bag = claims as {
+    publicMetadata?: Record<string, unknown>;
+    metadata?: Record<string, unknown>;
+  } | null;
+  const role = bag?.publicMetadata?.role ?? bag?.metadata?.role;
+  return isRole(role) ? (role as Role) : null;
 }
 
 export type Viewer = {

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { useUser } from "@clerk/nextjs";
+
 import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
 import {
   createEvent as createEventRow,
@@ -233,11 +235,12 @@ export function useEventMutations() {
 /** Registration actions for the event detail and My Events screens. */
 export function useEventRegistration(eventId: string | null) {
   const client = useSupabaseClient();
+  const { user } = useUser();
 
   const register = useCallback(async () => {
     if (!eventId) return { ok: false, error: "No event selected" };
-    return registerForEventRow(client, eventId);
-  }, [client, eventId]);
+    return registerForEventRow(client, eventId, user?.id ?? null);
+  }, [client, eventId, user?.id]);
 
   const unregister = useCallback(async () => {
     if (!eventId) return { ok: false, error: "No event selected" };
