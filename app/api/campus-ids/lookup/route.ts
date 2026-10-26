@@ -8,7 +8,7 @@ const lookupSchema = z.object({
     .string()
     .trim()
     .min(1, 'Campus ID is required')
-    .regex(/^CA\d{1,8}$/i, 'Campus ID must look like CA20240001')
+    .regex(/^CA\d{1,8}$/i, 'Campus ID must look like CA20260001')
     .transform((value) => value.toUpperCase()),
 })
 
