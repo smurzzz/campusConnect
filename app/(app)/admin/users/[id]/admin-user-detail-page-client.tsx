@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSupabaseClient } from "@/lib/hooks/use-supabase-client";
 import { toAccountStatusLabel } from "@/lib/users-labels";
 import { ROLE_LABELS, type Role } from "@/lib/constants/roles";
+import { emailAvatarUrl } from "@/lib/utils/avatar";
 
 type UserDetail = {
   id: string;
@@ -144,9 +145,9 @@ export default function AdminUserDetailPage() {
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <section className="section-panel">
           <div className="mb-5 flex items-center gap-4">
-            {user.avatar_url ? (
+            {(user.avatar_url ?? emailAvatarUrl(user.email, 128)) ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.avatar_url} alt="" className="size-16 rounded-full object-cover" />
+              <img src={user.avatar_url ?? emailAvatarUrl(user.email, 128) ?? ""} alt="" className="size-16 rounded-full object-cover" />
             ) : (
               <span className="grid size-16 place-items-center rounded-full bg-primary-soft text-xl font-bold text-primary">
                 {(user.full_name ?? "?").charAt(0).toUpperCase()}

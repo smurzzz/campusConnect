@@ -31,6 +31,7 @@ import type { Database } from "@/lib/supabase";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { toPublicationLabel, statusTone, ITEM_STATUSES, ITEM_TYPES, type ItemType } from "@/lib/constants/statuses";
 import { AssignConcernDialog as AssignConcernDialogReal } from "@/components/concerns/assign-concern-dialog";
+import { profileAvatarUrl } from "@/lib/utils/avatar";
 import { AttendanceBarChart, ResolutionDonut, StatusBarChart } from "@/components/charts/campus-charts";
 
 type PageKey = string;
@@ -566,7 +567,8 @@ function Profile(){
   const { user, isLoaded } = useUser();
   const role = useRole();
   const [phone, setPhone] = useState("");
-  const [saving, setSaving] = useState(false);    useEffect(()=>{ if (user) setPhone((user.unsafeMetadata?.contactNumber as string | undefined) ?? "") },[user]);
+  const [saving, setSaving] = useState(false);
+  const [avatarFailed, setAvatarFailed] = useState(false);    useEffect(()=>{ if (user) setPhone((user.unsafeMetadata?.contactNumber as string | undefined) ?? "") },[user]);
   if (!isLoaded) return <AppShell title="My profile" subtitle="Keep your contact information up to date."><div className="section-panel p-0 py-8 text-center text-muted-foreground">Loading…</div></AppShell>;
   const displayName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Member";
   const initials = displayName.split(" ").map(p=>p.charAt(0)).slice(0,2).join("");
@@ -585,7 +587,11 @@ function Profile(){
       setSaving(false);
     }
   };
-  return <AppShell title="My profile" subtitle="Keep your contact information up to date."><div className="max-w-3xl"><Section title="Profile information"><div className="mb-7 flex items-center gap-4">{user?.imageUrl?<img src={user.imageUrl} alt="" className="size-20 rounded-full object-cover"/>:<span className="grid size-20 place-items-center rounded-full bg-primary-soft text-xl font-bold text-primary">{initials}</span>}<div><p className="font-bold">{displayName}</p><StatusBadge status={role==="admin"?"Active":"Student"}/></div></div><form className="grid gap-5 sm:grid-cols-2" onSubmit={save}><FormField label="Full name"><Input defaultValue={displayName} readOnly/></FormField><FormField label="Email" note="Managed by your school account"><Input defaultValue={user?.primaryEmailAddress?.emailAddress ?? ""} readOnly/></FormField><FormField label="Contact number"><Input value={phone} onChange={(e)=>setPhone(e.target.value)} placeholder="Your contact number"/></FormField><FormField label="Account role"><Input defaultValue={role} readOnly/></FormField><div className="sm:col-span-2"><Button type="submit" disabled={saving}>{saving?"Saving…":"Save changes"}</Button></div></form></Section></div></AppShell>}
+  // Photo from the sign-in provider when there is one, otherwise the email's
+  // Gravatar identicon, so every account (user *and* admin) shows a picture.
+  const email = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses?.[0]?.emailAddress ?? "";
+  const avatar = avatarFailed ? null : profileAvatarUrl(user?.imageUrl, email, 160);
+  return <AppShell title="My profile" subtitle="Keep your contact information up to date."><div className="max-w-3xl"><Section title="Profile information"><div className="mb-7 flex items-center gap-4">{avatar?<img src={avatar} alt="" className="size-20 rounded-full object-cover" onError={()=>setAvatarFailed(true)}/>:<span className="grid size-20 place-items-center rounded-full bg-primary-soft text-xl font-bold text-primary">{initials}</span>}<div><p className="font-bold">{displayName}</p><StatusBadge status={role==="admin"?"Active":"Student"}/></div></div><form className="grid gap-5 sm:grid-cols-2" onSubmit={save}><FormField label="Full name"><Input defaultValue={displayName} readOnly/></FormField><FormField label="Email" note="Managed by your school account"><Input defaultValue={user?.primaryEmailAddress?.emailAddress ?? ""} readOnly/></FormField><FormField label="Contact number"><Input value={phone} onChange={(e)=>setPhone(e.target.value)} placeholder="Your contact number"/></FormField><FormField label="Account role"><Input defaultValue={role} readOnly/></FormField><div className="sm:col-span-2"><Button type="submit" disabled={saving}>{saving?"Saving…":"Save changes"}</Button></div></form></Section></div></AppShell>}
 function Notifications(){const { notifications, loading, error, markAsRead, markAllAsRead, unreadCount } = useNotifications();
   if (loading) return <AppShell title="Notifications" subtitle="Updates that need your attention." actions={<Button variant="outline" onClick={markAllAsRead} disabled={unreadCount === 0}><Check/>Mark all as read</Button>}><div className="section-panel p-0 text-center py-8">Loading notifications...</div></AppShell>;
   if (error) return <AppShell title="Notifications" subtitle="Updates that need your attention." actions={<Button variant="outline" onClick={markAllAsRead} disabled={unreadCount === 0}><Check/>Mark all as read</Button>}><div className="section-panel p-0">Error loading notifications: {error}</div></AppShell>;
